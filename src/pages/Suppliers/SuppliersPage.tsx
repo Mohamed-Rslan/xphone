@@ -13,7 +13,7 @@ import {
   recordPurchaseReturn, getPurchaseReturns, getFinancialAccounts
 } from '../../lib/commands'
 import { formatEGP, formatDate, formatDateTime, today } from '../../lib/utils'
-import { exportPeriodPurchasesReport } from '../../lib/excel'
+import { exportPeriodPurchasesReport, exportSuppliersExcel } from '../../lib/excel'
 import ExportReportModal from '../../components/ExportReportModal'
 import SettleSupplierInvoicesModal from '../../components/SettleSupplierInvoicesModal'
 import toast from 'react-hot-toast'
@@ -159,12 +159,30 @@ export default function SuppliersPage() {
 
           <button
             type="button"
+            onClick={async () => {
+              const t = toast.loading('جاري توليد ملف Excel للموردين والمستحقات...')
+              try {
+                await exportSuppliersExcel(suppliers, purchaseOrders)
+                toast.success('تم تصدير تقرير الموردين لـ Excel بنجاح!', { id: t })
+              } catch (err: any) {
+                toast.error('فشل تصدير التقرير: ' + err.toString(), { id: t })
+              }
+            }}
+            className="btn-secondary flex items-center gap-2 font-bold cursor-pointer text-blue-400 border-blue-500/40 hover:bg-blue-500/10 shadow-sm"
+            title="تصدير بيانات الموردين وإجماليات المشتريات والمديونيات لملف Excel"
+          >
+            <FileSpreadsheet size={16} />
+            تصدير الموردين Excel
+          </button>
+
+          <button
+            type="button"
             onClick={() => setShowExportPurchasesModal(true)}
             className="btn-secondary flex items-center gap-2 font-bold cursor-pointer text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/10 shadow-sm"
             title="استخراج تقرير إكسيل بفواتير وتوريدات المشتريات لفترة محددة مع الإجماليات"
           >
             <FileSpreadsheet size={16} />
-            تصدير تقرير المشتريات لـ Excel
+            تصدير المشتريات Excel
           </button>
 
           <button

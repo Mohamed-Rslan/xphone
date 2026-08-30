@@ -19,13 +19,13 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { id: 'dashboard',  label: 'لوحة التحكم',             icon: LayoutDashboard },
   { id: 'pos',        label: 'نقطة البيع',                icon: ShoppingCart, permCheck: h => h('sales_create') },
-  { id: 'accounts',   label: 'الحسابات والسيولة والحدود', icon: Landmark,     permCheck: h => h('accounts_manage') },
-  { id: 'expenses',   label: 'المصروفات',                 icon: Wallet,       permCheck: h => h('expenses_create') || h('expenses_edit_delete') || h('income_statement_view') },
-  { id: 'inventory',  label: 'المخزون',                   icon: Package,      permCheck: h => h('inventory_edit') || h('inventory_damaged') },
-  { id: 'suppliers',  label: 'الموردون والمشتريات',      icon: Truck,        permCheck: h => h('purchases_create') || h('suppliers_debts') },
-  { id: 'repairs',    label: 'الصيانة',                   icon: Wrench,       permCheck: h => h('repairs_manage') },
   { id: 'monetary',   label: 'الخدمات المالية',           icon: Banknote,     permCheck: h => h('monetary_manage') },
+  { id: 'repairs',    label: 'الصيانة',                   icon: Wrench,       permCheck: h => h('repairs_manage') },
+  { id: 'accounts',   label: 'الحسابات والسيولة والحدود', icon: Landmark,     permCheck: h => h('accounts_manage') },
+  { id: 'inventory',  label: 'المخزون',                   icon: Package,      permCheck: h => h('inventory_edit') || h('inventory_damaged') },
+  { id: 'expenses',   label: 'المصروفات',                 icon: Wallet,       permCheck: h => h('expenses_create') || h('expenses_edit_delete') || h('income_statement_view') || h('manage_liabilities') },
   { id: 'customers',  label: 'العملاء',                   icon: Users,        permCheck: h => h('customers_debts') },
+  { id: 'suppliers',  label: 'الموردون والمشتريات',      icon: Truck,        permCheck: h => h('purchases_create') || h('suppliers_debts') },
   { id: 'accounting', label: 'المحاسبة والتقارير',        icon: Calculator,   permCheck: h => h('income_statement_view') || h('balance_sheet_view') || h('equity_edit') },
   { id: 'settings',   label: 'الإعدادات',                 icon: Settings,     permCheck: h => h('settings_manage') },
 ]

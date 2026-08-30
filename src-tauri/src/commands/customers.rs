@@ -27,6 +27,26 @@ pub struct CustomerPayload {
     pub notes: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CustomerReportItem {
+    pub id: String,
+    pub name: String,
+    pub phone: Option<String>,
+    pub phone2: Option<String>,
+    pub address: Option<String>,
+    pub notes: Option<String>,
+    pub sales_count: i64,
+    pub sales_total: f64,
+    pub monetary_count: i64,
+    pub monetary_total: f64,
+    pub monetary_breakdown: String,
+    pub repairs_count: i64,
+    pub repairs_total: f64,
+    pub total_volume: f64,
+    pub debt_balance: f64,
+    pub created_at: String,
+}
+
 #[tauri::command]
 pub async fn get_customers(
     state: State<'_, AppState>,
@@ -64,6 +84,112 @@ pub async fn get_customers(
         })
     })?.collect::<Result<Vec<_>, _>>()?;
     Ok(customers)
+}
+
+#[tauri::command]
+pub async fn get_customers_report(
+    state: State<'_, AppState>,
+    date_from: Option<String>,
+    date_to: Option<String>,
+) -> Result<Vec<CustomerReportItem>, AppError> {
+    let conn = state.pool.get()?;
+    
+    let mut stmt = conn.prepare(
+        "SELECT id, name, phone, phone2, address, notes, created_at FROM customers ORDER BY name ASC"
+    )?;
+
+    let cust_rows = stmt.query_map([], |r| {
+        Ok((
+            r.get::<_, String>(0)?,
+            r.get::<_, String>(1)?,
+            r.get::<_, Option<String>>(2)?,
+            r.get::<_, Option<String>>(3)?,
+            r.get::<_, Option<String>>(4)?,
+            r.get::<_, Option<String>>(5)?,
+            r.get::<_, String>(6)?,
+        ))
+    })?.collect::<Result<Vec<_>, _>>()?;
+
+    let mut report = Vec::new();
+
+    let d_from = date_from.unwrap_or_else(|| "2000-01-01".to_string());
+    let d_to = date_to.unwrap_or_else(|| "2099-12-31".to_string());
+
+    for (cid, cname, cphone, cphone2, caddress, cnotes, ccreated) in cust_rows {
+        // Sales stats
+        let (sales_count, sales_total): (i64, f64) = conn.query_row(
+            "SELECT COUNT(*), COALESCE(SUM(total), 0.0) FROM sales WHERE customer_id = ?1 AND status != 'returned' AND date(created_at) BETWEEN ?2 AND ?3",
+            rusqlite::params![cid, d_from, d_to],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        ).unwrap_or((0, 0.0));
+
+        // Unpaid sales debt (current)
+        let debt_balance: f64 = conn.query_row(
+            "SELECT COALESCE(SUM(CASE WHEN status != 'returned' AND total > (cash_amount + card_amount) THEN (total - (cash_amount + card_amount)) ELSE 0.0 END), 0.0)
+             FROM sales WHERE customer_id = ?1",
+            rusqlite::params![cid],
+            |r| r.get(0),
+        ).unwrap_or(0.0);
+
+        // Repair jobs stats
+        let (repairs_count, repairs_total): (i64, f64) = conn.query_row(
+            "SELECT COUNT(*), COALESCE(SUM(total_cost), 0.0) FROM repair_jobs WHERE customer_id = ?1 AND date(received_at) BETWEEN ?2 AND ?3",
+            rusqlite::params![cid, d_from, d_to],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        ).unwrap_or((0, 0.0));
+
+        // Monetary transactions stats & breakdown
+        let (monetary_count, monetary_total): (i64, f64) = conn.query_row(
+            "SELECT COUNT(*), COALESCE(SUM(amount), 0.0) FROM monetary_transactions WHERE customer_id = ?1 AND date(created_at) BETWEEN ?2 AND ?3",
+            rusqlite::params![cid, d_from, d_to],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        ).unwrap_or((0, 0.0));
+
+        // Monetary services breakdown
+        let mut m_stmt = conn.prepare(
+            "SELECT mst.name_ar, COUNT(mt.id), COALESCE(SUM(mt.amount), 0.0)
+             FROM monetary_transactions mt
+             JOIN monetary_service_types mst ON mt.service_type_id = mst.id
+             WHERE mt.customer_id = ?1 AND date(mt.created_at) BETWEEN ?2 AND ?3
+             GROUP BY mst.id, mst.name_ar"
+        )?;
+
+        let m_items: Vec<String> = m_stmt.query_map(rusqlite::params![cid, d_from, d_to], |mr| {
+            let sname: String = mr.get(0)?;
+            let scnt: i64 = mr.get(1)?;
+            let samt: f64 = mr.get(2)?;
+            Ok(format!("{} ({} حركات: {:.2} ج.م)", sname, scnt, samt))
+        })?.collect::<Result<Vec<_>, _>>().unwrap_or_default();
+
+        let monetary_breakdown = if m_items.is_empty() {
+            "—".to_string()
+        } else {
+            m_items.join(" • ")
+        };
+
+        let total_volume = sales_total + monetary_total + repairs_total;
+
+        report.push(CustomerReportItem {
+            id: cid,
+            name: cname,
+            phone: cphone,
+            phone2: cphone2,
+            address: caddress,
+            notes: cnotes,
+            sales_count,
+            sales_total,
+            monetary_count,
+            monetary_total,
+            monetary_breakdown,
+            repairs_count,
+            repairs_total,
+            total_volume,
+            debt_balance,
+            created_at: ccreated,
+        });
+    }
+
+    Ok(report)
 }
 
 #[tauri::command]

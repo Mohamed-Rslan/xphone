@@ -48,6 +48,9 @@ export const getDetailedSaleItemsReport = (dateFrom: string, dateTo: string) =>
 export const getCustomers = (search?: string) =>
   invoke<any[]>('get_customers', { search })
 
+export const getCustomersReport = (dateFrom?: string, dateTo?: string) =>
+  invoke<any[]>('get_customers_report', { dateFrom, dateTo, date_from: dateFrom, date_to: dateTo })
+
 export const createCustomer = (payload: any) =>
   invoke<any>('create_customer', { payload })
 

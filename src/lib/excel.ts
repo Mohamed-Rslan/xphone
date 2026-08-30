@@ -1668,3 +1668,200 @@ export async function exportLiabilitiesExcel(liabilities: any[]): Promise<boolea
   const filename = `Liabilities_Report_${today()}.xlsx`
   return await saveExcelWithDialog(workbook, filename)
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 11. CUSTOMERS DETAILED EXPORT (تصدير تقرير العملاء والمسحوبات الشامل)
+// ─────────────────────────────────────────────────────────────────────────────
+export async function exportCustomersExcel(customersReport: any[], dateFrom?: string, dateTo?: string): Promise<boolean> {
+  const storeName = useSettingsStore.getState().storeName || 'XPhone'
+  const workbook = XLSX.utils.book_new()
+
+  const headers = [
+    'م',
+    'اسم العميل',
+    'رقم الهاتف',
+    'رقم آخر',
+    'العنوان',
+    'عدد فواتير الشراء',
+    'حجم المشتريات (ج.م)',
+    'عدد الخدمات النقدية',
+    'إجمالي الخدمات النقدية (ج.م)',
+    'تفصيل نوع الخدمات النقدية',
+    'عدد أجهزة الصيانة',
+    'إجمالي تكلفة الصيانة (ج.م)',
+    'إجمالي حجم التعاملات الكلي (ج.م)',
+    'المديونية المستحقة (ج.م)',
+    'تاريخ التسجيل',
+    'ملاحظات'
+  ]
+
+  const totalSales = customersReport.reduce((sum, c) => sum + (c.sales_total || 0), 0)
+  const totalMonetary = customersReport.reduce((sum, c) => sum + (c.monetary_total || 0), 0)
+  const totalRepairs = customersReport.reduce((sum, c) => sum + (c.repairs_total || 0), 0)
+  const totalVolume = customersReport.reduce((sum, c) => sum + (c.total_volume || 0), 0)
+  const totalDebt = customersReport.reduce((sum, c) => sum + (c.debt_balance || 0), 0)
+
+  const rows: any[][] = customersReport.map((c, idx) => [
+    idx + 1,
+    c.name,
+    c.phone || '—',
+    c.phone2 || '—',
+    c.address || '—',
+    c.sales_count || 0,
+    c.sales_total || 0,
+    c.monetary_count || 0,
+    c.monetary_total || 0,
+    c.monetary_breakdown || '—',
+    c.repairs_count || 0,
+    c.repairs_total || 0,
+    c.total_volume || 0,
+    c.debt_balance || 0,
+    formatDate(c.created_at),
+    c.notes || '—'
+  ])
+
+  rows.push([
+    { v: 'الإجمالي الكلي', t: 's', s: styles.totalRow },
+    { v: `${customersReport.length} عميل`, t: 's', s: styles.totalRow },
+    { v: '-', t: 's', s: styles.totalRow },
+    { v: '-', t: 's', s: styles.totalRow },
+    { v: '-', t: 's', s: styles.totalRow },
+    { v: '-', t: 's', s: styles.totalRow },
+    { v: totalSales, t: 'n', s: styles.totalRow },
+    { v: '-', t: 's', s: styles.totalRow },
+    { v: totalMonetary, t: 'n', s: styles.totalRow },
+    { v: '-', t: 's', s: styles.totalRow },
+    { v: '-', t: 's', s: styles.totalRow },
+    { v: totalRepairs, t: 'n', s: styles.totalRow },
+    { v: totalVolume, t: 'n', s: styles.totalRow },
+    { v: totalDebt, t: 'n', s: styles.totalRow },
+    { v: '-', t: 's', s: styles.totalRow },
+    { v: '-', t: 's', s: styles.totalRow },
+  ])
+
+  const colWidths = [
+    { wch: 6 },
+    { wch: 25 },
+    { wch: 16 },
+    { wch: 16 },
+    { wch: 25 },
+    { wch: 15 },
+    { wch: 20 },
+    { wch: 16 },
+    { wch: 22 },
+    { wch: 35 },
+    { wch: 16 },
+    { wch: 20 },
+    { wch: 25 },
+    { wch: 20 },
+    { wch: 15 },
+    { wch: 30 },
+  ]
+
+  const periodSubtitle = dateFrom && dateTo
+    ? `الفترة الزمنية من: ${formatDate(dateFrom)} إلى: ${formatDate(dateTo)}  |  `
+    : ''
+
+  const sheet = buildFormattedSheet(
+    `تقرير مسحوبات وتعاملات العملاء الشامل — ${storeName}`,
+    dateFrom ? formatDate(dateFrom) : today(),
+    dateTo ? formatDate(dateTo) : today(),
+    headers,
+    rows,
+    colWidths,
+    `${periodSubtitle}إجمالي التعاملات الكلية: ${formatEGP(totalVolume)}  |  إجمالي المديونيات المستحقة: ${formatEGP(totalDebt)}`
+  )
+
+  XLSX.utils.book_append_sheet(workbook, sheet, 'تقرير تعاملات العملاء')
+
+  const filename = `Customers_Report_${today()}.xlsx`
+  return await saveExcelWithDialog(workbook, filename)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 12. SUPPLIERS DETAILED EXPORT (تصدير تقرير الموردين والمستحقات)
+// ─────────────────────────────────────────────────────────────────────────────
+export async function exportSuppliersExcel(suppliers: any[], purchaseOrders: any[] = []): Promise<boolean> {
+  const storeName = useSettingsStore.getState().storeName || 'XPhone'
+  const workbook = XLSX.utils.book_new()
+
+  const headers = [
+    'م',
+    'اسم المورد / الشركة',
+    'رقم الهاتف',
+    'العنوان',
+    'عدد فواتير المشتريات',
+    'إجمالي المشتريات (ج.م)',
+    'إجمالي المسدد (ج.م)',
+    'الرصيد / المستحق للمورد (ج.م)',
+    'تاريخ التسجيل',
+    'ملاحظات'
+  ]
+
+  let grandPurchasesTotal = 0
+  let grandPaidTotal = 0
+  const grandDebtTotal = suppliers.reduce((sum, s) => sum + (s.balance || 0), 0)
+
+  const rows: any[][] = suppliers.map((s, idx) => {
+    const sOrders = purchaseOrders.filter((po: any) => po.supplier_id === s.id)
+    const sPurchases = sOrders.reduce((sum: number, po: any) => sum + (po.total_cost || 0), 0)
+    const sPaid = sOrders.reduce((sum: number, po: any) => sum + (po.amount_paid || 0), 0)
+
+    grandPurchasesTotal += sPurchases
+    grandPaidTotal += sPaid
+
+    return [
+      idx + 1,
+      s.name,
+      s.phone || '—',
+      s.address || '—',
+      sOrders.length,
+      sPurchases,
+      sPaid,
+      s.balance || 0,
+      formatDate(s.created_at),
+      s.notes || '—'
+    ]
+  })
+
+  rows.push([
+    { v: 'الإجمالي الكلي', t: 's', s: styles.totalRow },
+    { v: `${suppliers.length} مورد`, t: 's', s: styles.totalRow },
+    { v: '-', t: 's', s: styles.totalRow },
+    { v: '-', t: 's', s: styles.totalRow },
+    { v: '-', t: 's', s: styles.totalRow },
+    { v: grandPurchasesTotal, t: 'n', s: styles.totalRow },
+    { v: grandPaidTotal, t: 'n', s: styles.totalRow },
+    { v: grandDebtTotal, t: 'n', s: styles.totalRow },
+    { v: '-', t: 's', s: styles.totalRow },
+    { v: '-', t: 's', s: styles.totalRow },
+  ])
+
+  const colWidths = [
+    { wch: 6 },
+    { wch: 30 },
+    { wch: 18 },
+    { wch: 25 },
+    { wch: 18 },
+    { wch: 22 },
+    { wch: 22 },
+    { wch: 22 },
+    { wch: 15 },
+    { wch: 30 },
+  ]
+
+  const sheet = buildFormattedSheet(
+    `تقرير الموردين وإجماليات المشتريات والمستحقات — ${storeName}`,
+    today(),
+    today(),
+    headers,
+    rows,
+    colWidths,
+    `إجمالي الموردين: ${suppliers.length}  |  إجمالي مستحقات الموردين الحالية: ${formatEGP(grandDebtTotal)}`
+  )
+
+  XLSX.utils.book_append_sheet(workbook, sheet, 'سجل الموردين والمستحقات')
+
+  const filename = `Suppliers_Report_${today()}.xlsx`
+  return await saveExcelWithDialog(workbook, filename)
+}

@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Plus, Search, User, CreditCard } from 'lucide-react'
-import { getCustomers, createCustomer, updateCustomer, getCustomerHistory } from '../../lib/commands'
+import { Plus, Search, User, CreditCard, FileSpreadsheet } from 'lucide-react'
+import { getCustomers, getCustomersReport, createCustomer, updateCustomer, getCustomerHistory } from '../../lib/commands'
 import { formatEGP, formatDate } from '../../lib/utils'
+import { exportCustomersExcel } from '../../lib/excel'
 import SettleCustomerInvoicesModal from '../../components/SettleCustomerInvoicesModal'
 import toast from 'react-hot-toast'
 
@@ -31,11 +32,32 @@ export default function CustomersPage() {
     setShowSettleModal(true)
   }
 
+  const handleExportCustomersExcel = async () => {
+    const t = toast.loading('جاري تحضير وتوليد تقرير تعاملات ومسحوبات العملاء لـ Excel...')
+    try {
+      const reportData = await getCustomersReport()
+      await exportCustomersExcel(reportData || [])
+      toast.success('تم تصدير تقرير العملاء لـ Excel بنجاح!', { id: t })
+    } catch (err: any) {
+      toast.error('فشل تصدير تقرير العملاء: ' + err.toString(), { id: t })
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6 animate-slide-up">
       <div className="page-header flex items-center justify-between flex-wrap gap-3">
-        <h1 className="page-title">إدارة العملاء</h1>
+        <h1 className="page-title">إدارة العملاء والمسحوبات</h1>
         <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            className="btn-secondary flex items-center gap-2 text-xs py-2 px-3.5 font-bold cursor-pointer shadow-sm hover:scale-[1.01] transition-transform"
+            style={{ borderColor: 'rgba(59,130,246,0.4)', color: '#60a5fa' }}
+            onClick={handleExportCustomersExcel}
+            title="تصدير تقرير تعاملات ومسحوبات العملاء لملف Excel"
+          >
+            <FileSpreadsheet size={15} className="text-blue-400" />
+            تصدير العملاء لـ Excel
+          </button>
           <button
             type="button"
             className="btn-secondary flex items-center gap-2 text-xs py-2 px-3.5 font-bold cursor-pointer shadow-sm hover:scale-[1.01] transition-transform"

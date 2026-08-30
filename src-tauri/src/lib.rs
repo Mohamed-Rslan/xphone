@@ -51,6 +51,7 @@ pub fn run() {
             sales::process_sale_partial_return,
             // Customers
             customers::get_customers,
+            customers::get_customers_report,
             customers::create_customer,
             customers::update_customer,
             customers::get_customer_history,
