@@ -147,13 +147,13 @@ export default function EditUserPermissionsModal({
             </div>
 
             <div>
-              <label className="label text-xs font-bold mb-1">الدور الوظيفي</label>
+              <label className="label text-xs font-bold mb-1">الدور الوظيفي (Role)</label>
               <select
                 className="input w-full text-xs font-bold"
                 value={role}
                 onChange={e => setRole(e.target.value as any)}
               >
-                <option value="admin">مدير المبيعات المسؤول (Super Admin - كامل الصلاحيات)</option>
+                <option value="admin">مدير الحسابات والمالية المسؤول (Super Admin - كامل الصلاحيات)</option>
                 <option value="staff">موظف (محدد الصلاحيات)</option>
               </select>
             </div>
@@ -223,7 +223,7 @@ export default function EditUserPermissionsModal({
               <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center gap-3">
                 <Sparkles size={24} className="text-emerald-400 flex-shrink-0" />
                 <div className="text-xs text-emerald-300">
-                  <strong>مدير المبيعات المسؤول (Super Admin):</strong> يمتلك وصولاً كاملاً وغير مقيد لكافة وظائف وشاشات النظام والتقارير المالية وإدارة المستخدمين تلقائياً.
+                  <strong>مدير الحسابات والمالية المسؤول (Super Admin):</strong> يمتلك وصولاً كاملاً وغير مقيد لكافة وظائف وشاشات النظام والتقارير المالية وإدارة المستخدمين تلقائياً.
                 </div>
               </div>
             ) : (

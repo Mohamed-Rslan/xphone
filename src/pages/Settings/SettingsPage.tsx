@@ -324,7 +324,7 @@ export default function SettingsPage({ scale = 0.9, setScale }: SettingsPageProp
                 إدارة المستخدمين وصلاحيات الأدوار
               </h3>
               <p className="text-xs text-[var(--clr-muted)]">
-                يمكن لمدير المبيعات المسؤول تحديد الصلاحيات التفصيلية لكل موظف وتعيين رقم هاتف الواتساب
+                يمكن لمدير الحسابات والمالية المسؤول تحديد الصلاحيات التفصيلية لكل موظف وتعيين رقم هاتف الواتساب
               </p>
             </div>
 
@@ -343,7 +343,7 @@ export default function SettingsPage({ scale = 0.9, setScale }: SettingsPageProp
                 <tr>
                   <th>اسم المستخدم</th>
                   <th>الاسم الكامل</th>
-                  <th>الدور والوظيفة</th>
+                  <th>المسمى الوظيفي والدور</th>
                   <th>رقم الهاتف (WhatsApp)</th>
                   <th>الصلاحيات الممنوحة</th>
                   <th>الحالة</th>
@@ -368,7 +368,7 @@ export default function SettingsPage({ scale = 0.9, setScale }: SettingsPageProp
                       </td>
                       <td>
                         <span className={`badge font-bold text-xs ${u.role === 'admin' ? 'badge-primary shadow-sm' : 'badge-muted'}`}>
-                          {u.role === 'admin' ? '👑 مدير المبيعات المسؤول' : '👤 موظف / كاشير'}
+                          {u.job_title ? `👑 ${u.job_title}` : (u.role === 'admin' ? '👑 مدير الحسابات والمالية' : '👤 موظف / كاشير')}
                         </span>
                       </td>
                       <td dir="ltr" className="font-mono text-xs text-[var(--clr-muted)]">
@@ -783,7 +783,7 @@ function AddUserModal({ onClose, onSave }: any) {
             <label className="label text-xs font-bold">الدور الوظيفي</label>
             <select className="input text-xs font-bold" value={form.role} onChange={e => set('role', e.target.value)}>
               <option value="staff">موظف (محدد الصلاحيات)</option>
-              <option value="admin">مدير المبيعات المسؤول (Super Admin - كامل الصلاحيات)</option>
+              <option value="admin">مدير الحسابات والمالية المسؤول (Super Admin - كامل الصلاحيات)</option>
             </select>
           </div>
         </div>

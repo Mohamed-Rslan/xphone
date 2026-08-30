@@ -91,7 +91,7 @@ export default function ResetPasswordOtpModal({ onClose, onSuccess }: ResetPassw
                 استعادة كلمة المرور عبر WhatsApp OTP
               </h3>
               <p className="text-[11px] text-[var(--clr-muted)]">
-                خاص بمدير المبيعات والمسؤولين المسجل لديهم رقم هاتف
+                خاص بمدير الحسابات والمالية والمسؤولين المسجل لديهم رقم هاتف
               </p>
             </div>
           </div>

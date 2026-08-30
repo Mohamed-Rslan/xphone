@@ -43,7 +43,7 @@ function AccessDenied({ pageName }: { pageName: string }) {
           ليس لديك صلاحية الوصول إلى صفحة <span style={{ color: 'var(--clr-primary)' }}>{pageName}</span>
         </p>
         <p className="text-xs mt-2" style={{ color: 'var(--clr-muted)' }}>
-          تواصل مع مدير المبيعات المسؤول لتفعيل هذه الصلاحية
+          تواصل مع مدير الحسابات والمالية المسؤول لتفعيل هذه الصلاحية
         </p>
       </div>
     </div>

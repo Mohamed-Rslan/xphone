@@ -358,8 +358,8 @@ export default function TopBar({ scale, setScale, onMenuToggle }: TopBarProps) {
             <div className="text-sm font-semibold leading-none" style={{ color: 'var(--clr-text)' }}>
               {user?.display_name}
             </div>
-            <div className="text-xs" style={{ color: 'var(--clr-muted)' }}>
-              {user?.role === 'admin' ? 'مدير المبيعات' : 'موظف'}
+            <div className="text-xs font-semibold" style={{ color: 'var(--clr-muted)' }}>
+              {user?.job_title || (user?.role === 'admin' ? 'مدير الحسابات والمالية' : 'موظف')}
             </div>
           </div>
         </div>

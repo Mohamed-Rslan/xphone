@@ -104,7 +104,7 @@ export default function RecordDamagedGoodsModal({
         <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-2.5 text-xs text-amber-300 mb-4">
           <ShieldAlert size={18} className="flex-shrink-0 mt-0.5" />
           <span>
-            هذه العملية حساسة: سيتم <strong>خصم الكمية فوراً من المخزون</strong> وإدراج تكلفتها في <strong>قائمة الدخل كمصروفات</strong> وإرسال إشعار فوري لمدير المبيعات.
+            هذه العملية حساسة: سيتم <strong>خصم الكمية فوراً من المخزون</strong> وإدراج تكلفتها في <strong>قائمة الدخل كمصروفات</strong> وإرسال إشعار فوري لمدير الحسابات والمالية.
           </span>
         </div>
 
