@@ -149,6 +149,27 @@ export const getEquityTransactions = (shareholderId?: string) => invoke<any[]>('
 export const calculateProfitDistribution = (dateFrom: string, dateTo: string, method?: string) =>
   invoke<any>('calculate_profit_distribution', { dateFrom, dateTo, method })
 
+export interface FinancialAccount {
+  id: string
+  name_ar: string
+  name_en?: string | null
+  is_active: boolean
+  created_at: string
+  balance: number
+  limit_type?: string
+  min_balance_limit?: number | null
+  max_balance_limit?: number | null
+  debit_limit_amount?: number | null
+  debit_limit_days?: number | null
+  warning_threshold_pct?: number
+  current_period_debit?: number
+  alert_status: string
+  alert_message?: string
+  monthly_inflow: number
+  monthly_outflow: number
+  net_monthly_flow: number
+}
+
 // ─── Balance Sheet & Alerts & Detailed Metrics ───────────────────
 export const getBalanceSheet = (asOfDate?: string) =>
   invoke<any>('get_balance_sheet', { targetDate: asOfDate, target_date: asOfDate, asOfDate })

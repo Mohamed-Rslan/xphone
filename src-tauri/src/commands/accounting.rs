@@ -1640,9 +1640,15 @@ pub struct FinancialAccount {
     pub is_active: bool,
     pub created_at: String,
     pub balance: f64,
+    pub limit_type: String, // "min_max" or "debit_limit"
     pub min_balance_limit: Option<f64>,
     pub max_balance_limit: Option<f64>,
-    pub alert_status: String, // "normal", "near_min", "below_min", "near_max", "above_max"
+    pub debit_limit_amount: Option<f64>,
+    pub debit_limit_days: Option<i32>,
+    pub warning_threshold_pct: f64,
+    pub current_period_debit: f64,
+    pub alert_status: String, // "normal", "warning_75", "exceeded_100", "below_min", "above_max", "near_min", "near_max"
+    pub alert_message: String,
     pub monthly_inflow: f64,
     pub monthly_outflow: f64,
     pub net_monthly_flow: f64,
@@ -1652,15 +1658,23 @@ pub struct FinancialAccount {
 pub struct CreateAccountPayload {
     pub name_ar: String,
     pub name_en: Option<String>,
+    pub limit_type: Option<String>,
     pub min_balance_limit: Option<f64>,
     pub max_balance_limit: Option<f64>,
+    pub debit_limit_amount: Option<f64>,
+    pub debit_limit_days: Option<i32>,
+    pub warning_threshold_pct: Option<f64>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateAccountLimitsPayload {
     pub id: String,
+    pub limit_type: Option<String>,
     pub min_balance_limit: Option<f64>,
     pub max_balance_limit: Option<f64>,
+    pub debit_limit_amount: Option<f64>,
+    pub debit_limit_days: Option<i32>,
+    pub warning_threshold_pct: Option<f64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -1668,8 +1682,59 @@ pub struct AccountAlert {
     pub account_id: String,
     pub account_name: String,
     pub balance: f64,
-    pub alert_type: String, // "below_min", "near_min", "above_max", "near_max"
+    pub alert_type: String, // "below_min", "near_min", "above_max", "near_max", "warning_75", "exceeded_100"
     pub message: String,
+}
+
+pub fn get_period_debit_outflow_for_account(conn: &rusqlite::Connection, account_id: &str, days: i32) -> f64 {
+    let days_val = days.max(1);
+    let days_param = format!("-{} days", days_val);
+
+    let exp_out: f64 = conn.query_row(
+        "SELECT COALESCE(SUM(amount), 0.0) FROM expenses WHERE financial_account_id = ?1 AND date(expense_date) >= date('now', ?2)",
+        rusqlite::params![account_id, days_param],
+        |r| r.get(0)
+    ).unwrap_or(0.0);
+
+    let accr_out: f64 = conn.query_row(
+        "SELECT COALESCE(SUM(amount), 0.0) FROM accrued_expenses WHERE status = 'paid' AND financial_account_id = ?1 AND date(created_at) >= date('now', ?2)",
+        rusqlite::params![account_id, days_param],
+        |r| r.get(0)
+    ).unwrap_or(0.0);
+
+    let mon_out: f64 = if account_id == "cash_drawer" {
+        conn.query_row(
+            "SELECT COALESCE(SUM(amount), 0.0) FROM monetary_transactions WHERE tx_type = 'transfer_in_cash_out' AND date(created_at) >= date('now', ?1)",
+            rusqlite::params![days_param],
+            |r| r.get(0)
+        ).unwrap_or(0.0)
+    } else {
+        conn.query_row(
+            "SELECT COALESCE(SUM(amount), 0.0) FROM monetary_transactions WHERE tx_type = 'cash_in_transfer_out' AND financial_account_id = ?1 AND date(created_at) >= date('now', ?2)",
+            rusqlite::params![account_id, days_param],
+            |r| r.get(0)
+        ).unwrap_or(0.0)
+    };
+
+    let supp_out: f64 = conn.query_row(
+        "SELECT COALESCE(SUM(amount), 0.0) FROM supplier_payments WHERE financial_account_id = ?1 AND date(created_at) >= date('now', ?2)",
+        rusqlite::params![account_id, days_param],
+        |r| r.get(0)
+    ).unwrap_or(0.0);
+
+    let trans_out: f64 = conn.query_row(
+        "SELECT COALESCE(SUM(amount), 0.0) FROM financial_transfers WHERE from_account_id = ?1 AND date(created_at) >= date('now', ?2)",
+        rusqlite::params![account_id, days_param],
+        |r| r.get(0)
+    ).unwrap_or(0.0);
+
+    let eq_out: f64 = conn.query_row(
+        "SELECT COALESCE(SUM(amount), 0.0) FROM equity_transactions WHERE tx_type IN ('withdrawal','profit_distribution','short_term_withdrawal') AND counterpart_type='cash' AND financial_account_id = ?1 AND date(tx_date) >= date('now', ?2)",
+        rusqlite::params![account_id, days_param],
+        |r| r.get(0)
+    ).unwrap_or(0.0);
+
+    exp_out + accr_out + mon_out + supp_out + trans_out + eq_out
 }
 
 pub fn calculate_account_balance(conn: &rusqlite::Connection, account_id: &str) -> Result<f64, AppError> {
@@ -1909,7 +1974,8 @@ pub async fn get_financial_accounts(
 ) -> Result<Vec<FinancialAccount>, AppError> {
     let conn = state.pool.get()?;
     let mut stmt = conn.prepare(
-        "SELECT id, name_ar, name_en, is_active, created_at, min_balance_limit, max_balance_limit
+        "SELECT id, name_ar, name_en, is_active, created_at, min_balance_limit, max_balance_limit,
+                COALESCE(limit_type, 'min_max'), debit_limit_amount, COALESCE(debit_limit_days, 30), COALESCE(warning_threshold_pct, 75.0)
          FROM financial_accounts ORDER BY created_at ASC"
     )?;
     let accounts_iter = stmt.query_map([], |r| {
@@ -1921,35 +1987,76 @@ pub async fn get_financial_accounts(
             r.get::<_, String>(4)?,
             r.get::<_, Option<f64>>(5)?,
             r.get::<_, Option<f64>>(6)?,
+            r.get::<_, String>(7)?,
+            r.get::<_, Option<f64>>(8)?,
+            r.get::<_, i32>(9)?,
+            r.get::<_, f64>(10)?,
         ))
     })?;
 
     let mut list = Vec::new();
     for item in accounts_iter {
-        let (id, name_ar, name_en, is_active, created_at, min_limit, max_limit) = item?;
+        let (id, name_ar, name_en, is_active, created_at, min_limit, max_limit, limit_type, debit_limit_amount, debit_limit_days, warning_threshold_pct) = item?;
         let balance = calculate_account_balance(&conn, &id)?;
         let (monthly_inflow, monthly_outflow) = get_monthly_cashflow_for_account(&conn, &id);
+        let current_period_debit = get_period_debit_outflow_for_account(&conn, &id, debit_limit_days);
 
         let mut alert_status = "normal".to_string();
-        if let Some(min_val) = min_limit {
-            if balance <= min_val {
-                alert_status = "below_min".to_string();
-            } else if balance <= min_val * 1.15 {
-                alert_status = "near_min".to_string();
+        let mut alert_message = "الحساب يعمل بصورة طبيعية ضمن الحدود المقررة".to_string();
+
+        if limit_type == "debit_limit" {
+            if let Some(debit_max) = debit_limit_amount {
+                if debit_max > 0.0 {
+                    let pct = (current_period_debit / debit_max) * 100.0;
+                    if pct >= 100.0 {
+                        alert_status = "exceeded_100".to_string();
+                        alert_message = format!("🚨 تنبيه مشدد عاجل: تجاوز إجمالي الحركات المدينة الخارجة الحد الأقصى المسموح ({:.1}%) للمدة ({} يوم)!", pct, debit_limit_days);
+                        let _ = crate::commands::notifications::log_system_notification(
+                            &conn, None, "نظام التنبيهات والحدود", "debit_limit_exceeded",
+                            &format!("🚨 تجاوز الحد الأقصى للمسحوبات ({})", name_ar),
+                            Some(&format!("بلغت الحركات المدينة الخارجة {:.2} ج.م بنسبة {:.1}% من الحد الأقصى ({} يوم)", current_period_debit, pct, debit_limit_days))
+                        );
+                    } else if pct >= warning_threshold_pct {
+                        alert_status = "warning_75".to_string();
+                        alert_message = format!("⚠️ تحذير: بلغت الحركات المدينة الخارجة {:.1}% من الحد الأقصى المسموح للمدة ({} يوم)", pct, debit_limit_days);
+                        let _ = crate::commands::notifications::log_system_notification(
+                            &conn, None, "نظام التنبيهات والحدود", "debit_limit_warning",
+                            &format!("⚠️ تحذير اقتراب من الحد النقدي ({})", name_ar),
+                            Some(&format!("بلغت الحركات المدينة الخارجة {:.2} ج.م بنسبة {:.1}% من الحد الأقصى المقرر", current_period_debit, pct))
+                        );
+                    }
+                }
             }
-        }
-        if let Some(max_val) = max_limit {
-            if balance >= max_val {
-                alert_status = "above_max".to_string();
-            } else if balance >= max_val * 0.85 {
-                alert_status = "near_max".to_string();
+        } else {
+            if let Some(min_val) = min_limit {
+                let near_min_val = min_val * (1.0 + (100.0 - warning_threshold_pct) / 100.0);
+                if balance <= min_val {
+                    alert_status = "below_min".to_string();
+                    alert_message = format!("🚨 تنبيه مشدد: رصيد الحساب الحالي ({:.2} ج.م) ينخفض عن الحد الأدنى المسموح ({:.2} ج.م)!", balance, min_val);
+                } else if balance <= near_min_val {
+                    alert_status = "near_min".to_string();
+                    alert_message = format!("⚠️ تحذير: رصيد الحساب يقترب من الحد الأدنى المقبول (نسبة التنبيه {:.0}%)", warning_threshold_pct);
+                }
+            }
+            if let Some(max_val) = max_limit {
+                let near_max_val = max_val * (warning_threshold_pct / 100.0);
+                if balance >= max_val {
+                    alert_status = "above_max".to_string();
+                    alert_message = format!("🚨 تنبيه مشدد: رصيد الحساب الحالي ({:.2} ج.م) يتجاوز الحد الأقصى المسموح ({:.2} ج.م)!", balance, max_val);
+                } else if balance >= near_max_val {
+                    alert_status = "near_max".to_string();
+                    alert_message = format!("⚠️ تحذير: رصيد الحساب يقترب من الحد الأقصى المقبول (وصل إلى {:.0}%)", warning_threshold_pct);
+                }
             }
         }
 
         list.push(FinancialAccount {
             id, name_ar, name_en, is_active, created_at, balance,
-            min_balance_limit: min_limit, max_balance_limit: max_limit,
-            alert_status, monthly_inflow, monthly_outflow,
+            limit_type, min_balance_limit: min_limit, max_balance_limit: max_limit,
+            debit_limit_amount, debit_limit_days: Some(debit_limit_days),
+            warning_threshold_pct, current_period_debit,
+            alert_status, alert_message,
+            monthly_inflow, monthly_outflow,
             net_monthly_flow: monthly_inflow - monthly_outflow,
         });
     }
@@ -1965,18 +2072,52 @@ pub async fn create_financial_account(
     let id = Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
 
+    let limit_type = payload.limit_type.unwrap_or_else(|| "min_max".to_string());
+    let debit_days = payload.debit_limit_days.unwrap_or(30);
+    let warning_pct = payload.warning_threshold_pct.unwrap_or(75.0);
+
     conn.execute(
-        "INSERT INTO financial_accounts (id, name_ar, name_en, is_active, min_balance_limit, max_balance_limit, created_at)
-         VALUES (?1, ?2, ?3, 1, ?4, ?5, ?6)",
-        rusqlite::params![id, payload.name_ar, payload.name_en, payload.min_balance_limit, payload.max_balance_limit, now],
+        "INSERT INTO financial_accounts (id, name_ar, name_en, is_active, min_balance_limit, max_balance_limit, limit_type, debit_limit_amount, debit_limit_days, warning_threshold_pct, created_at)
+         VALUES (?1, ?2, ?3, 1, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+        rusqlite::params![
+            id, payload.name_ar, payload.name_en, payload.min_balance_limit, payload.max_balance_limit,
+            limit_type, payload.debit_limit_amount, debit_days, warning_pct, now
+        ],
     )?;
 
     Ok(FinancialAccount {
         id, name_ar: payload.name_ar, name_en: payload.name_en, is_active: true,
-        created_at: now, balance: 0.0, min_balance_limit: payload.min_balance_limit,
-        max_balance_limit: payload.max_balance_limit, alert_status: "normal".to_string(),
+        created_at: now, balance: 0.0, limit_type,
+        min_balance_limit: payload.min_balance_limit,
+        max_balance_limit: payload.max_balance_limit,
+        debit_limit_amount: payload.debit_limit_amount,
+        debit_limit_days: Some(debit_days),
+        warning_threshold_pct: warning_pct,
+        current_period_debit: 0.0,
+        alert_status: "normal".to_string(),
+        alert_message: "الحساب يعمل بصورة طبيعية".to_string(),
         monthly_inflow: 0.0, monthly_outflow: 0.0, net_monthly_flow: 0.0,
     })
+}
+
+#[tauri::command]
+pub async fn update_financial_account_limits(
+    state: State<'_, AppState>,
+    payload: UpdateAccountLimitsPayload,
+) -> Result<(), AppError> {
+    let conn = state.pool.get()?;
+    let limit_type = payload.limit_type.unwrap_or_else(|| "min_max".to_string());
+    let debit_days = payload.debit_limit_days.unwrap_or(30);
+    let warning_pct = payload.warning_threshold_pct.unwrap_or(75.0);
+
+    conn.execute(
+        "UPDATE financial_accounts SET limit_type=?1, min_balance_limit=?2, max_balance_limit=?3, debit_limit_amount=?4, debit_limit_days=?5, warning_threshold_pct=?6 WHERE id=?7",
+        rusqlite::params![
+            limit_type, payload.min_balance_limit, payload.max_balance_limit,
+            payload.debit_limit_amount, debit_days, warning_pct, payload.id
+        ],
+    )?;
+    Ok(())
 }
 
 #[derive(Debug, Deserialize)]
@@ -1986,19 +2127,6 @@ pub struct AdjustAccountBalancePayload {
     pub reason: Option<String>,
     pub user_id: Option<String>,
     pub username: String,
-}
-
-#[tauri::command]
-pub async fn update_financial_account_limits(
-    state: State<'_, AppState>,
-    payload: UpdateAccountLimitsPayload,
-) -> Result<(), AppError> {
-    let conn = state.pool.get()?;
-    conn.execute(
-        "UPDATE financial_accounts SET min_balance_limit=?1, max_balance_limit=?2 WHERE id=?3",
-        rusqlite::params![payload.min_balance_limit, payload.max_balance_limit, payload.id],
-    )?;
-    Ok(())
 }
 
 #[tauri::command]

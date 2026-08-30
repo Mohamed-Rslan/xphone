@@ -119,14 +119,18 @@ export default function AccountsPage() {
     e.preventDefault()
     if (!showLimitModal) return
     setSavingLimit(true)
-    const t = toast.loading('جاري حفظ حدود الرصيد...')
+    const t = toast.loading('جاري حفظ حدود الحساب والضوابط الإشعارية...')
     try {
       await updateFinancialAccountLimits({
         id: showLimitModal.id,
+        limit_type: limitType,
         min_balance_limit: limitMin ? parseFloat(limitMin) : null,
         max_balance_limit: limitMax ? parseFloat(limitMax) : null,
+        debit_limit_amount: debitLimitAmount ? parseFloat(debitLimitAmount) : null,
+        debit_limit_days: debitLimitDays ? parseInt(debitLimitDays) : 30,
+        warning_threshold_pct: warningThresholdPct ? parseFloat(warningThresholdPct) : 75.0,
       })
-      toast.success('تم تحديث حدود الحساب والتنبيهات بنجاح!', { id: t })
+      toast.success('تم تحديث ضوابط وحدود الحساب النقدي بنجاح!', { id: t })
       setShowLimitModal(null)
       loadData()
     } catch (err: any) {
@@ -221,8 +225,12 @@ export default function AccountsPage() {
 
   const openLimitModalForAccount = (acc: any) => {
     setShowLimitModal(acc)
+    setLimitType(acc.limit_type || 'min_max')
     setLimitMin(acc.min_balance_limit != null ? acc.min_balance_limit.toString() : '')
     setLimitMax(acc.max_balance_limit != null ? acc.max_balance_limit.toString() : '')
+    setDebitLimitAmount(acc.debit_limit_amount != null ? acc.debit_limit_amount.toString() : '')
+    setDebitLimitDays(acc.debit_limit_days != null ? acc.debit_limit_days.toString() : '30')
+    setWarningThresholdPct(acc.warning_threshold_pct != null ? acc.warning_threshold_pct.toString() : '75')
   }
 
   const openTransferModalForAccount = (acc: any, mode: 'from' | 'to' = 'from') => {
@@ -425,14 +433,14 @@ export default function AccountsPage() {
                   {/* Alert Ribbon if any */}
                   {isAlert && (
                     <div
-                      className="py-1 px-3 text-center text-xs font-bold text-white mb-2 rounded-md animate-pulse"
+                      className="py-1.5 px-3 text-center text-xs font-bold text-white mb-2 rounded-md animate-pulse shadow-md"
                       style={{
-                        background: isMin ? 'rgba(239, 68, 68, 0.9)' : 'rgba(245, 158, 11, 0.9)',
+                        background: acc.alert_status.includes('100') || acc.alert_status.includes('below') || acc.alert_status.includes('above')
+                          ? 'rgba(239, 68, 68, 0.95)'
+                          : 'rgba(245, 158, 11, 0.95)',
                       }}
                     >
-                      {acc.alert_status === 'below_min' ? '⚠️ وصل للحد الأدنى المسموح!' :
-                       acc.alert_status === 'near_min' ? '⚠️ يقترب من الحد الأدنى!' :
-                       acc.alert_status === 'above_max' ? '⚠️ تجاوز الحد الأقصى المسموح!' : '⚠️ يقترب من الحد الأقصى!'}
+                      {acc.alert_message || '⚠️ تنبيه ضوابط الحساب النقدي!'}
                     </div>
                   )}
 
@@ -489,18 +497,47 @@ export default function AccountsPage() {
 
                   {/* Limits Information */}
                   <div className="p-2.5 rounded-lg bg-[var(--clr-surface-3)] border text-[11px] space-y-1 mb-4" style={{ borderColor: 'var(--clr-border)' }}>
-                    <div className="flex justify-between">
-                      <span className="text-[var(--clr-muted)]">الحد الأدنى:</span>
-                      <span className="font-mono font-bold">
-                        {acc.min_balance_limit != null ? formatEGP(acc.min_balance_limit) : 'غير محدد'}
-                      </span>
+                    <div className="flex justify-between items-center text-[var(--clr-primary)] font-bold mb-1 border-b pb-1">
+                      <span>ضوابط الحساب:</span>
+                      <span>{acc.limit_type === 'debit_limit' ? '2️⃣ سقف مسحوبات' : '1️⃣ حدود رصيد'}</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-[var(--clr-muted)]">الحد الأقصى:</span>
-                      <span className="font-mono font-bold">
-                        {acc.max_balance_limit != null ? formatEGP(acc.max_balance_limit) : 'غير محدد'}
-                      </span>
-                    </div>
+                    {acc.limit_type === 'debit_limit' ? (
+                      <>
+                        <div className="flex justify-between">
+                          <span className="text-[var(--clr-muted)]">سقف حركات المدفوعات:</span>
+                          <span className="font-mono font-bold text-red-400">
+                            {acc.debit_limit_amount != null ? formatEGP(acc.debit_limit_amount) : 'غير محدد'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-[var(--clr-muted)]">المدفوعات للفترة ({acc.debit_limit_days || 30} يوم):</span>
+                          <span className="font-mono font-bold text-amber-400">
+                            {formatEGP(acc.current_period_debit || 0)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-[var(--clr-muted)]">نسبة التنبيه المقرر:</span>
+                          <span className="font-mono font-bold text-emerald-400">
+                            {acc.warning_threshold_pct || 75}%
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex justify-between">
+                          <span className="text-[var(--clr-muted)]">الحد الأدنى:</span>
+                          <span className="font-mono font-bold">
+                            {acc.min_balance_limit != null ? formatEGP(acc.min_balance_limit) : 'غير محدد'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-[var(--clr-muted)]">الحد الأقصى:</span>
+                          <span className="font-mono font-bold">
+                            {acc.max_balance_limit != null ? formatEGP(acc.max_balance_limit) : 'غير محدد'}
+                          </span>
+                        </div>
+                      </>
+                    )}
                   </div>
 
                   {/* Card Action Buttons */}
@@ -741,34 +778,102 @@ export default function AccountsPage() {
                 <span className="text-lg font-black font-mono text-[var(--clr-primary)]">{formatEGP(showLimitModal.balance)}</span>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label font-bold text-xs">الحد الأدنى للتنبيه (ج.م):</label>
-                  <input
-                    type="number"
-                    step="any"
-                    className="input w-full font-mono font-bold"
-                    value={limitMin}
-                    onChange={e => setLimitMin(e.target.value)}
-                    placeholder="اتركه فارغاً للإلغاء"
-                  />
-                </div>
-                <div>
-                  <label className="label font-bold text-xs">الحد الأقصى للتنبيه (ج.م):</label>
-                  <input
-                    type="number"
-                    step="any"
-                    className="input w-full font-mono font-bold"
-                    value={limitMax}
-                    onChange={e => setLimitMax(e.target.value)}
-                    placeholder="اتركه فارغاً للإلغاء"
-                  />
+              <div className="flex flex-col gap-2">
+                <label className="label font-bold text-xs">طريقة حساب الحدود والتنبيهات لهذا الحساب:</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    className={`py-2 px-3 text-xs font-bold rounded-xl border transition-all ${
+                      limitType === 'min_max'
+                        ? 'bg-[var(--clr-primary)]/15 border-[var(--clr-primary)] text-[var(--clr-primary)]'
+                        : 'bg-[var(--clr-surface-2)] border-[var(--clr-border)] text-[var(--clr-muted)]'
+                    }`}
+                    onClick={() => setLimitType('min_max')}
+                  >
+                    1️⃣ الحد الأدنى والأقصى للرصيد
+                  </button>
+                  <button
+                    type="button"
+                    className={`py-2 px-3 text-xs font-bold rounded-xl border transition-all ${
+                      limitType === 'debit_limit'
+                        ? 'bg-[var(--clr-primary)]/15 border-[var(--clr-primary)] text-[var(--clr-primary)]'
+                        : 'bg-[var(--clr-surface-2)] border-[var(--clr-border)] text-[var(--clr-muted)]'
+                    }`}
+                    onClick={() => setLimitType('debit_limit')}
+                  >
+                    2️⃣ سقف المسحوبات لفترة
+                  </button>
                 </div>
               </div>
 
-              <p className="text-[11px] text-[var(--clr-muted)]">
-                سيقوم النظام بإظهار وميض تحذيري فوري وإشعار إذا اقترب أو تجاوز الرصيد هذه الحدود.
-              </p>
+              {limitType === 'min_max' ? (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="label font-bold text-xs">الحد الأدنى للرصيد (ج.م):</label>
+                    <input
+                      type="number"
+                      step="any"
+                      className="input w-full font-mono font-bold"
+                      value={limitMin}
+                      onChange={e => setLimitMin(e.target.value)}
+                      placeholder="مثال: 5000"
+                    />
+                  </div>
+                  <div>
+                    <label className="label font-bold text-xs">الحد الأقصى للرصيد (ج.م):</label>
+                    <input
+                      type="number"
+                      step="any"
+                      className="input w-full font-mono font-bold"
+                      value={limitMax}
+                      onChange={e => setLimitMax(e.target.value)}
+                      placeholder="مثال: 50000"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2">
+                    <label className="label font-bold text-xs">إجمالي حد الحركات المدينة الخارجة (ج.م):</label>
+                    <input
+                      type="number"
+                      step="any"
+                      className="input w-full font-mono font-bold text-red-400"
+                      value={debitLimitAmount}
+                      onChange={e => setDebitLimitAmount(e.target.value)}
+                      placeholder="مثال: 100000"
+                    />
+                    <span className="text-[10px] text-[var(--clr-muted)] mt-1 block">
+                      يشمل المصروفات والسحوبات وسداد الموردين والتحويلات الخارجة من الحساب.
+                    </span>
+                  </div>
+                  <div>
+                    <label className="label font-bold text-xs">المدة الزمنية (بالأيام):</label>
+                    <input
+                      type="number"
+                      className="input w-full font-mono font-bold"
+                      value={debitLimitDays}
+                      onChange={e => setDebitLimitDays(e.target.value)}
+                      placeholder="30 يوم (شهر كامل)"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="label font-bold text-xs">نسبة حد التنبيه الإشعاري (%):</label>
+                <input
+                  type="number"
+                  step="any"
+                  className="input w-full font-mono font-bold"
+                  value={warningThresholdPct}
+                  onChange={e => setWarningThresholdPct(e.target.value)}
+                  placeholder="75%"
+                />
+                <span className="text-[10px] text-[var(--clr-muted)] mt-1 block">
+                  سيتم إرسال إشعار للمستخدم والمدير عند الوصول لـ {warningThresholdPct || '75'}% وتنبيه مشدد عند 100%.
+                </span>
+              </div>
 
               <div className="flex gap-2.5 pt-3 border-t mt-1" style={{ borderColor: 'var(--clr-border)' }}>
                 <button type="button" className="btn-secondary flex-1 py-2.5 font-bold" onClick={() => setShowLimitModal(null)} disabled={savingLimit}>
