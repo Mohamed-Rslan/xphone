@@ -31,7 +31,7 @@ export default function TopBar({ scale, setScale, onMenuToggle }: TopBarProps) {
   const [time, setTime] = useState(new Date())
   const [alerts, setAlerts] = useState<any[]>([])
   const [showAlertModal, setShowAlertModal] = useState(false)
-  const [showThemeMenu, setShowThemeMenu] = useState(false)
+  const [showThemeModal, setShowThemeModal] = useState(false)
   const [notifications, setNotifications] = useState<SystemNotification[]>([])
   const [broadcastNotifs, setBroadcastNotifs] = useState<BroadcastNotification[]>([])
   const [showNotifsModal, setShowNotifsModal] = useState(false)
@@ -242,12 +242,12 @@ export default function TopBar({ scale, setScale, onMenuToggle }: TopBarProps) {
           )}
         </button>
 
-        {/* Theme Picker Dropdown */}
-        <div className="relative" ref={themeMenuRef}>
+        {/* Theme Picker Trigger */}
+        <div>
           <button
             type="button"
-            onClick={() => setShowThemeMenu(!showThemeMenu)}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all duration-200 cursor-pointer shadow-sm"
+            onClick={() => setShowThemeModal(true)}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all duration-200 cursor-pointer shadow-sm hover:scale-105"
             style={{
               background: 'var(--clr-surface-2)',
               borderColor: 'var(--clr-border)',
@@ -262,61 +262,6 @@ export default function TopBar({ scale, setScale, onMenuToggle }: TopBarProps) {
             <Palette size={15} style={{ color: 'var(--clr-primary)' }} />
             <span className="text-xs font-bold hidden sm:inline">{activeThemeObj.nameAr}</span>
           </button>
-
-          {showThemeMenu && (
-            <div
-              className="absolute left-0 mt-2 w-64 glass-card p-2 rounded-2xl shadow-2xl z-50 border animate-slide-up"
-              style={{
-                borderColor: 'var(--clr-border-2)',
-                background: 'var(--glass-bg)',
-                backdropFilter: 'blur(30px)',
-              }}
-            >
-              <div className="text-xs font-bold px-3 py-2 border-b flex items-center gap-1.5" style={{ borderColor: 'var(--clr-border)', color: 'var(--clr-muted)' }}>
-                <Sparkles size={13} className="text-[var(--clr-primary)]" />
-                اختر ثيم ومظهر البرنامج:
-              </div>
-
-              <div className="flex flex-col gap-1 mt-1 max-h-72 overflow-y-auto p-1">
-                {THEMES.map((th) => {
-                  const isSelected = currentTheme === th.id
-                  return (
-                    <button
-                      key={th.id}
-                      type="button"
-                      onClick={() => {
-                        setTheme(th.id)
-                        setShowThemeMenu(false)
-                        toast.success(`تم تفعيل: ${th.nameAr}`)
-                      }}
-                      className={`flex items-center justify-between p-2 rounded-xl text-xs font-bold transition-all text-right cursor-pointer ${
-                        isSelected
-                          ? 'bg-[var(--clr-primary)]/15 text-[var(--clr-primary)] border border-[var(--clr-primary)]/40 shadow-sm'
-                          : 'hover:bg-white/[0.05] text-[var(--clr-text)] border border-transparent'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <div
-                          className="w-4 h-4 rounded-full border border-white/20 shadow-inner flex items-center justify-center shrink-0"
-                          style={{ background: th.primaryColor }}
-                        >
-                          <div
-                            className="w-1.5 h-1.5 rounded-full"
-                            style={{ background: th.accentColor }}
-                          />
-                        </div>
-                        <div>
-                          <div>{th.nameAr}</div>
-                          <div className="text-[10px] font-normal text-[var(--clr-muted)]">{th.nameEn}</div>
-                        </div>
-                      </div>
-                      {isSelected && <Check size={14} className="text-[var(--clr-primary)]" />}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* System Activity Notifications Bell (For ALL Users) */}
@@ -662,6 +607,146 @@ export default function TopBar({ scale, setScale, onMenuToggle }: TopBarProps) {
             fetchNotifications()
           }}
         />
+      )}
+
+      {/* Centered Themes Picker Modal (نافذة فرعية مركزية لاختيار وتصفح الثيمات) */}
+      {showThemeModal && (
+        <div className="modal-overlay">
+          <div className="modal-content p-6 max-w-2xl w-full max-h-[85vh] flex flex-col gap-4">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: 'var(--clr-border)' }}>
+              <div className="flex items-center gap-2 text-[var(--clr-text)]">
+                <div className="w-9 h-9 rounded-xl bg-[var(--clr-primary)]/10 text-[var(--clr-primary)] flex items-center justify-center border border-[var(--clr-primary)]/20">
+                  <Palette size={20} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg flex items-center gap-2">
+                    <span>اختيار وتخصيص ثيم ومظهر البرنامج</span>
+                  </h3>
+                  <p className="text-xs text-[var(--clr-muted)] mt-0.5">
+                    اختر المظهر النهاري أو الليلي المفضل لديك لراحة عينيك وتصفح التطبيق بوضوح عالي
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowThemeModal(false)}
+                className="btn-icon p-1.5 text-[var(--clr-muted)] hover:text-white"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Themes Grid */}
+            <div className="flex-1 overflow-y-auto flex flex-col gap-4 pr-1 max-h-[60vh]">
+              {/* Day / Light Themes */}
+              <div>
+                <h4 className="text-xs font-bold text-sky-400 mb-2.5 flex items-center gap-1.5 border-b pb-1.5" style={{ borderColor: 'var(--clr-border)' }}>
+                  <Sun size={15} />
+                  <span>☀️ الثيمات النهارية الناصعة (تباين عالي مريح جداً):</span>
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {THEMES.filter(t => !t.isDark).map((th) => {
+                    const isSelected = currentTheme === th.id
+                    return (
+                      <div
+                        key={th.id}
+                        onClick={() => {
+                          setTheme(th.id)
+                          toast.success(`تم تفعيل: ${th.nameAr}`)
+                        }}
+                        className={`p-3.5 rounded-xl border cursor-pointer transition-all flex flex-col justify-between gap-2.5 hover:scale-[1.02] ${
+                          isSelected
+                            ? 'bg-[var(--clr-primary)]/15 border-[var(--clr-primary)] ring-2 ring-[var(--clr-primary)]/40 shadow-lg'
+                            : 'bg-white/5 border-[var(--clr-border)] hover:border-white/20'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="w-5 h-5 rounded-full border border-black/20 shadow-sm flex items-center justify-center shrink-0"
+                              style={{ background: th.primaryColor }}
+                            >
+                              <div className="w-2 h-2 rounded-full" style={{ background: th.accentColor }} />
+                            </div>
+                            <div>
+                              <div className="font-bold text-xs text-[var(--clr-text)]">{th.nameAr}</div>
+                              <div className="text-[10px] text-[var(--clr-muted)] font-mono">{th.nameEn}</div>
+                            </div>
+                          </div>
+                          {isSelected && (
+                            <span className="badge badge-primary text-[10px] py-0.5 px-2 font-bold flex items-center gap-1 shadow-sm">
+                              <Check size={11} /> مُفعّل
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-[var(--clr-muted)] leading-relaxed">
+                          {th.description}
+                        </p>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Night / Dark Themes */}
+              <div>
+                <h4 className="text-xs font-bold text-purple-400 mb-2.5 flex items-center gap-1.5 border-b pb-1.5" style={{ borderColor: 'var(--clr-border)' }}>
+                  <Moon size={15} />
+                  <span>🌙 الثيمات الليلية الأنيقة (تصميم هادئ وعملي):</span>
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {THEMES.filter(t => t.isDark).map((th) => {
+                    const isSelected = currentTheme === th.id
+                    return (
+                      <div
+                        key={th.id}
+                        onClick={() => {
+                          setTheme(th.id)
+                          toast.success(`تم تفعيل: ${th.nameAr}`)
+                        }}
+                        className={`p-3.5 rounded-xl border cursor-pointer transition-all flex flex-col justify-between gap-2.5 hover:scale-[1.02] ${
+                          isSelected
+                            ? 'bg-[var(--clr-primary)]/15 border-[var(--clr-primary)] ring-2 ring-[var(--clr-primary)]/40 shadow-lg'
+                            : 'bg-white/5 border-[var(--clr-border)] hover:border-white/20'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="w-5 h-5 rounded-full border border-white/20 shadow-sm flex items-center justify-center shrink-0"
+                              style={{ background: th.primaryColor }}
+                            >
+                              <div className="w-2 h-2 rounded-full" style={{ background: th.accentColor }} />
+                            </div>
+                            <div>
+                              <div className="font-bold text-xs text-[var(--clr-text)]">{th.nameAr}</div>
+                              <div className="text-[10px] text-[var(--clr-muted)] font-mono">{th.nameEn}</div>
+                            </div>
+                          </div>
+                          {isSelected && (
+                            <span className="badge badge-primary text-[10px] py-0.5 px-2 font-bold flex items-center gap-1 shadow-sm">
+                              <Check size={11} /> مُفعّل
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-[var(--clr-muted)] leading-relaxed">
+                          {th.description}
+                        </p>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-3 border-t" style={{ borderColor: 'var(--clr-border)' }}>
+              <button type="button" className="btn-secondary text-xs font-bold" onClick={() => setShowThemeModal(false)}>
+                إغلاق النافذة
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </header>
   )
