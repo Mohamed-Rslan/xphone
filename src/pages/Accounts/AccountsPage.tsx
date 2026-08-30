@@ -39,8 +39,12 @@ export default function AccountsPage() {
   const [savingAccount, setSavingAccount] = useState(false)
 
   // Limit Form State
+  const [limitType, setLimitType] = useState<'min_max' | 'debit_limit'>('min_max')
   const [limitMin, setLimitMin] = useState('')
   const [limitMax, setLimitMax] = useState('')
+  const [debitLimitAmount, setDebitLimitAmount] = useState('')
+  const [debitLimitDays, setDebitLimitDays] = useState('30')
+  const [warningThresholdPct, setWarningThresholdPct] = useState('75')
   const [savingLimit, setSavingLimit] = useState(false)
 
   // Transfer Form State
