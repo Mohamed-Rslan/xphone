@@ -1463,64 +1463,124 @@ export async function exportExpensesExcel(
   accruedExpenses: any[],
   dateFrom: string,
   dateTo: string
-) {
+): Promise<boolean> {
   const storeName = 'XPhone Store'
   const workbook = XLSX.utils.book_new()
 
   const totalCash = expenses.reduce((sum, exp) => sum + (exp.amount || 0), 0)
-  const totalAccrued = accruedExpenses.filter(a => a.status === 'unpaid').reduce((sum, a) => sum + (a.amount || 0), 0)
+  const unpaidAccrued = accruedExpenses.filter(a => a.status === 'unpaid').reduce((sum, a) => sum + (a.amount || 0), 0)
+  const totalAccrued = accruedExpenses.reduce((sum, a) => sum + (a.amount || 0), 0)
 
-  const data: any[][] = [
-    [`تقرير المصروفات النقدية والالتزامات المستحقة — ${storeName}`],
-    [`الفترة من: ${formatDate(dateFrom)} إلى ${formatDate(dateTo)} | تاريخ الاستخراج: ${today()}`],
-    [],
-    ['إجمالي المصروفات النقدية الخزنية (ج.م):', totalCash],
-    ['إجمالي المصروفات المستحقة واجبة السداد (ج.م):', totalAccrued],
-    ['الإجمالي الكلي التكليفي للفترة (ج.م):', totalCash + totalAccrued],
-    [],
-    ['1. سجل المصروفات النقدية المسددة من الخزينة والحسابات:'],
-    ['تاريخ المصروف', 'التصنيف', 'البيان والوصف', 'المبلغ (ج.م)', 'طبيعة المصروف', 'حساب الخصم النقدي'],
-  ]
+  // ── 1. Tab 1: المصروفات النقدية (Cash Expenses) ──
+  const cashHeaders = ['تاريخ المصروف', 'التصنيف', 'البيان والوصف', 'المبلغ (ج.م)', 'طبيعة المصروف', 'حساب الخصم النقدي']
+  const cashRows: any[][] = expenses.map(exp => [
+    formatDate(exp.expense_date) || '—',
+    exp.category_name || 'عام',
+    exp.description || '—',
+    exp.amount || 0,
+    exp.is_recurring ? `دوري (${exp.recurrence || 'monthly'})` : 'عارض',
+    exp.financial_account_name || 'الخزينة الرئيسية',
+  ])
 
-  expenses.forEach(exp => {
-    data.push([
-      exp.expense_date || '—',
-      exp.category_name || 'عام',
-      exp.description || '—',
-      exp.amount || 0,
-      exp.is_recurring ? `دوري (${exp.recurrence || 'monthly'})` : 'عارض',
-      exp.financial_account_name || 'الخزينة الرئيسية',
-    ])
-  })
+  // Total summary row for Cash Expenses
+  cashRows.push([
+    { v: 'المجموع الإجمالي للمصروفات النقدية', t: 's', s: styles.totalRow },
+    { v: '', t: 's', s: styles.totalRow },
+    { v: '', t: 's', s: styles.totalRow },
+    { v: totalCash, t: 'n', s: styles.totalRow },
+    { v: '', t: 's', s: styles.totalRow },
+    { v: '', t: 's', s: styles.totalRow },
+  ])
 
-  data.push([])
-  data.push(['المجموع الكلي للمصروفات النقدية:', '', '', totalCash, '', ''])
-  data.push([])
-  data.push(['2. سجل المصروفات المستحقة والالتزامات (Accrued Liabilities):'])
-  data.push(['عنوان المصروف', 'المبلغ المستحق (ج.م)', 'التصنيف', 'تاريخ الاستحقاق', 'حالة السداد', 'الحساب النقدي المسدد منه'])
-
-  accruedExpenses.forEach(accr => {
-    data.push([
-      accr.title || '—',
-      accr.amount || 0,
-      accr.category_name || 'عام',
-      accr.due_date || 'غير محدد',
-      accr.status === 'paid' ? 'مسدد' : 'مستحق كالتزام',
-      accr.financial_account_name || '—',
-    ])
-  })
-
-  const sheet = XLSX.utils.aoa_to_sheet(data)
-  sheet['!cols'] = [
-    { wch: 20 },
-    { wch: 20 },
-    { wch: 35 },
+  const cashColWidths = [
     { wch: 18 },
+    { wch: 22 },
+    { wch: 38 },
     { wch: 20 },
-    { wch: 24 },
+    { wch: 20 },
+    { wch: 25 },
   ]
 
-  XLSX.utils.book_append_sheet(workbook, sheet, 'تقرير المصروفات')
+  const cashSheet = buildFormattedSheet(
+    `تقرير المصروفات النقدية المسددة — ${storeName}`,
+    formatDate(dateFrom),
+    formatDate(dateTo),
+    cashHeaders,
+    cashRows,
+    cashColWidths,
+    `الفترة من: ${formatDate(dateFrom)} إلى: ${formatDate(dateTo)}   |   إجمالي المصروفات النقدية الخزنية: ${formatEGP(totalCash)}`
+  )
+  XLSX.utils.book_append_sheet(workbook, cashSheet, 'المصروفات النقدية')
+
+  // ── 2. Tab 2: المصروفات المستحقة والالتزامات (Accrued Expenses) ──
+  const accruedHeaders = ['عنوان / بيان المصروف', 'المبلغ المستحق (ج.م)', 'التصنيف', 'تاريخ الاستحقاق', 'حالة السداد', 'الحساب النقدي المسدد منه']
+  const accruedRows: any[][] = accruedExpenses.map(accr => [
+    accr.title || '—',
+    accr.amount || 0,
+    accr.category_name || 'عام',
+    formatDate(accr.due_date) || 'غير محدد',
+    accr.status === 'paid' ? 'مسدد' : 'مستحق كالتزام',
+    accr.financial_account_name || '—',
+  ])
+
+  accruedRows.push([
+    { v: 'المجموع الكلي للمصروفات المستحقة والالتزامات', t: 's', s: styles.totalRow },
+    { v: totalAccrued, t: 'n', s: styles.totalRow },
+    { v: '', t: 's', s: styles.totalRow },
+    { v: '', t: 's', s: styles.totalRow },
+    { v: '', t: 's', s: styles.totalRow },
+    { v: '', t: 's', s: styles.totalRow },
+  ])
+
+  const accruedColWidths = [
+    { wch: 35 },
+    { wch: 22 },
+    { wch: 22 },
+    { wch: 18 },
+    { wch: 18 },
+    { wch: 25 },
+  ]
+
+  const accruedSheet = buildFormattedSheet(
+    `تقرير المصروفات المستحقة والالتزامات — ${storeName}`,
+    formatDate(dateFrom),
+    formatDate(dateTo),
+    accruedHeaders,
+    accruedRows,
+    accruedColWidths,
+    `الفترة من: ${formatDate(dateFrom)} إلى: ${formatDate(dateTo)}   |   إجمالي الالتزامات المستحقة واجبة السداد: ${formatEGP(unpaidAccrued)}`
+  )
+  XLSX.utils.book_append_sheet(workbook, accruedSheet, 'المصروفات المستحقة')
+
+  // ── 3. Tab 3: الملخص الشامل (Executive Summary) ──
+  const summaryHeaders = ['مؤشر المصروفات والتكلفة', 'القيمة الإجمالية (ج.م)', 'ملاحظات وتفاصيل']
+  const summaryRows: any[][] = [
+    ['إجمالي المصروفات النقدية المسددة من الخزينة والحسابات', totalCash, `${expenses.length} مصروف مسدد`],
+    ['إجمالي المصروفات المستحقة غير المسددة (التزامات)', unpaidAccrued, 'التزامات جارية واجبة السداد'],
+    ['إجمالي المصروفات المستحقة المسددة بالكامل', totalAccrued - unpaidAccrued, 'تم سدادها خصماً من الحسابات'],
+    [
+      { v: 'إجمالي التكلفة الكلية للمصروفات والالتزامات للفترة', t: 's', s: styles.totalRow },
+      { v: totalCash + unpaidAccrued, t: 'n', s: styles.totalRow },
+      { v: 'العبء التكليفي الكلي للفترة الزمنية المحددة', t: 's', s: styles.totalRow },
+    ]
+  ]
+
+  const summaryColWidths = [
+    { wch: 45 },
+    { wch: 25 },
+    { wch: 35 },
+  ]
+
+  const summarySheet = buildFormattedSheet(
+    `ملخص إجماليات المصروفات والتكلفة — ${storeName}`,
+    formatDate(dateFrom),
+    formatDate(dateTo),
+    summaryHeaders,
+    summaryRows,
+    summaryColWidths,
+    `تقرير ملخص التكلفة الكلية للفترة من: ${formatDate(dateFrom)} إلى: ${formatDate(dateTo)}`
+  )
+  XLSX.utils.book_append_sheet(workbook, summarySheet, 'الملخص الشامل')
 
   const filename = `Expenses_Report_${dateFrom}_to_${dateTo}.xlsx`
   return await saveExcelWithDialog(workbook, filename)

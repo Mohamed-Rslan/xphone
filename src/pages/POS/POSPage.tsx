@@ -9,7 +9,7 @@ import {
 } from '../../lib/commands'
 import { useCartStore } from '../../store/cartStore'
 import { useAuthStore } from '../../store/authStore'
-import { formatEGP, formatDate, formatDateTime, formatTime, today, monthStart } from '../../lib/utils'
+import { formatEGP, formatDate, formatDateTime, formatTime, today, monthStart, yearStart } from '../../lib/utils'
 import { exportPeriodSalesReport } from '../../lib/excel'
 import toast from 'react-hot-toast'
 import { openUrl } from '@tauri-apps/plugin-opener'
@@ -982,7 +982,7 @@ function SalesHistoryModal({
     return `${year}-${month}-${day}`
   }
 
-  const handleQuickFilter = (type: 'today' | 'yesterday' | 'week' | 'month') => {
+  const handleQuickFilter = (type: 'today' | 'yesterday' | 'week' | 'month' | 'year') => {
     const t = today()
     let f = t
     let targetTo = t
@@ -995,6 +995,8 @@ function SalesHistoryModal({
       f = getWeekAgoStr()
     } else if (type === 'month') {
       f = monthStart()
+    } else if (type === 'year') {
+      f = yearStart()
     }
     onDateFromChange(f)
     onDateToChange(targetTo)
@@ -1065,6 +1067,15 @@ function SalesHistoryModal({
                 }`}
               >
                 هذا الشهر
+              </button>
+              <button
+                type="button"
+                onClick={() => handleQuickFilter('year')}
+                className={`badge px-3 py-1.5 text-xs font-bold cursor-pointer transition-all ${
+                  dateFrom === yearStart() && dateTo === today() ? 'badge-primary' : 'badge-muted'
+                }`}
+              >
+                خلال السنة
               </button>
             </div>
 

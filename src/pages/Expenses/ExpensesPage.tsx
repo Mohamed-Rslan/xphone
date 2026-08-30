@@ -11,7 +11,7 @@ import {
 } from '../../lib/commands'
 import { useAuthStore } from '../../store/authStore'
 import { useSettingsStore } from '../../store/settingsStore'
-import { formatEGP, formatDate, monthStart, today } from '../../lib/utils'
+import { formatEGP, formatDate, monthStart, yearStart, today } from '../../lib/utils'
 import { exportExpensesExcel } from '../../lib/excel'
 import toast from 'react-hot-toast'
 
@@ -351,7 +351,7 @@ export default function ExpensesPage() {
     return `${year}-${month}-${day}`
   }
 
-  const handleQuickFilter = (type: 'today' | 'yesterday' | 'week' | 'month') => {
+  const handleQuickFilter = (type: 'today' | 'yesterday' | 'week' | 'month' | 'year') => {
     const t = today()
     let f = t
     let targetTo = t
@@ -364,6 +364,8 @@ export default function ExpensesPage() {
       f = getWeekAgoStr()
     } else if (type === 'month') {
       f = monthStart()
+    } else if (type === 'year') {
+      f = yearStart()
     }
     setDateFrom(f)
     setDateTo(targetTo)
@@ -519,6 +521,15 @@ export default function ExpensesPage() {
               }`}
             >
               هذا الشهر
+            </button>
+            <button
+              type="button"
+              onClick={() => handleQuickFilter('year')}
+              className={`badge px-3 py-1.5 text-xs font-bold cursor-pointer transition-all ${
+                dateFrom === yearStart() && dateTo === today() ? 'badge-primary' : 'badge-muted'
+              }`}
+            >
+              خلال السنة
             </button>
           </div>
 
