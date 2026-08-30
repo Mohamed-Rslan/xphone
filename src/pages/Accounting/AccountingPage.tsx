@@ -9,9 +9,8 @@ import {
   getProfitLoss, getSales, getSale, getLedger, getFinancialAccounts,
   createFinancialAccount, deleteFinancialAccount, transferFinancialAmount,
   adjustFinancialAccountBalance, getBeginningBalance, getFixedAssets, createFixedAsset, recordDepreciation,
-  deleteFixedAsset, getDamagedGoods, recordDamagedGoods, getAccruedExpenses,
-  createAccruedExpense, payAccruedExpense, deleteAccruedExpense,
-  getCustomerAdvances, createCustomerAdvance, getShareholders,
+  deleteFixedAsset, getDamagedGoods, recordDamagedGoods, getLiabilities, createLiability, payLiability, deleteLiability,
+  getLiabilityLedger, Liability, LiabilityLedgerEntry, getShareholders,
   createShareholder, createEquityTransaction, getEquityTransactions,
   calculateProfitDistribution, getBalanceSheet, updateFinancialAccountLimits,
   getSalesDetailedMetrics, processSaleReturn, processSalePartialReturn,
@@ -20,7 +19,7 @@ import {
 import { useAuthStore } from '../../store/authStore'
 import { formatEGP, formatDate, formatDateTime, monthStart, today, yearStart } from '../../lib/utils'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
-import { exportFullAccountingExcel, exportShareholderLedgerExcel } from '../../lib/excel'
+import { exportFullAccountingExcel, exportShareholderLedgerExcel, exportLiabilitiesExcel } from '../../lib/excel'
 import toast from 'react-hot-toast'
 import CashAccountMovementsModal from '../../components/CashAccountMovementsModal'
 
@@ -48,8 +47,7 @@ export default function AccountingPage() {
   const [distHistory, setDistHistory] = useState<any[]>([])
   const [confirmingDist, setConfirmingDist] = useState(false)
   const [distFinancialAccId, setDistFinancialAccId] = useState('cash_drawer')
-  const [accruedList, setAccruedList] = useState<any[]>([])
-  const [advancesList, setAdvancesList] = useState<any[]>([])
+  const [liabilitiesList, setLiabilitiesList] = useState<Liability[]>([])
   const [salesMetrics, setSalesMetrics] = useState<any>(null)
   const [expenses, setExpenses] = useState<any[]>([])
   const [categories, setCategories] = useState<any[]>([])
@@ -62,9 +60,24 @@ export default function AccountingPage() {
   const [showDepreciationModal, setShowDepreciationModal] = useState<any>(null)
   const [showAddShareholderModal, setShowAddShareholderModal] = useState(false)
   const [showEquityTxModal, setShowEquityTxModal] = useState<any>(null)
-  const [showAddAccruedModal, setShowAddAccruedModal] = useState(false)
-  const [showPayAccruedModal, setShowPayAccruedModal] = useState<any>(null)
-  const [showAddAdvanceModal, setShowAddAdvanceModal] = useState(false)
+  const [showAddLiabilityModal, setShowAddLiabilityModal] = useState(false)
+  const [showPayLiabilityModal, setShowPayLiabilityModal] = useState<Liability | null>(null)
+  const [selectedLedgerLiability, setSelectedLedgerLiability] = useState<Liability | null>(null)
+  const [ledgerEntries, setLedgerEntries] = useState<LiabilityLedgerEntry[]>([])
+  const [loadingLedger, setLoadingLedger] = useState(false)
+
+  // Form states - New Liability
+  const [liabTitle, setLiabTitle] = useState('')
+  const [liabAmount, setLiabAmount] = useState('')
+  const [liabCreditor, setLiabCreditor] = useState('')
+  const [liabDebitType, setLiabDebitType] = useState<'accrued_expense' | 'fixed_asset' | 'current_asset' | 'cash_advance'>('accrued_expense')
+  const [liabDueDate, setLiabDueDate] = useState(today())
+  const [liabNotes, setLiabNotes] = useState('')
+
+  // Form states - Pay Liability
+  const [payAmount, setPayAmount] = useState('')
+  const [payAccount, setPayAccount] = useState('cash_drawer')
+  const [payNotes, setPayNotes] = useState('')
   const [showAddExpenseModal, setShowAddExpenseModal] = useState(false)
   const [showReturnModal, setShowReturnModal] = useState<any>(null)
   const [returnItemsQty, setReturnItemsQty] = useState<{ [itemId: string]: number }>({})
@@ -198,9 +211,7 @@ export default function AccountingPage() {
         getFinancialAccounts(),
         getFixedAssets(),
         getShareholders(),
-        calculateProfitDistribution(dateFrom, dateTo, profitDistMethod),
-        getAccruedExpenses(),
-        getCustomerAdvances(),
+        getLiabilities('all'),
         getSalesDetailedMetrics(),
         getExpenses({ date_from: dateFrom, date_to: dateTo }),
         getExpenseCategories(),
@@ -214,12 +225,11 @@ export default function AccountingPage() {
       if (results[4].status === 'fulfilled') setFixedAssets(results[4].value || [])
       if (results[5].status === 'fulfilled') setShareholders(results[5].value || [])
       if (results[6].status === 'fulfilled') setProfitDistReport(results[6].value)
-      if (results[7].status === 'fulfilled') setAccruedList(results[7].value || [])
-      if (results[8].status === 'fulfilled') setAdvancesList(results[8].value || [])
-      if (results[9].status === 'fulfilled') setSalesMetrics(results[9].value)
-      if (results[10].status === 'fulfilled') setExpenses(results[10].value || [])
-      if (results[11].status === 'fulfilled') setCategories(results[11].value || [])
-      if (results[12].status === 'fulfilled') setShareholderLedgerList(results[12].value || [])
+      if (results[7].status === 'fulfilled') setLiabilitiesList(results[7].value || [])
+      if (results[8].status === 'fulfilled') setSalesMetrics(results[8].value)
+      if (results[9].status === 'fulfilled') setExpenses(results[9].value || [])
+      if (results[10].status === 'fulfilled') setCategories(results[10].value || [])
+      if (results[11].status === 'fulfilled') setShareholderLedgerList(results[11].value || [])
       // Load profit distribution & short-term contributions history
       try {
         const allTxs = await Promise.all(
@@ -637,19 +647,11 @@ export default function AccountingPage() {
         </button>
 
         <button
-          className={`badge cursor-pointer px-4 py-2.5 flex items-center gap-2 font-bold ${tab === 'accrued' ? 'badge-primary shadow-lg' : 'badge-muted'}`}
-          onClick={() => setTab('accrued')}
+          className={`badge cursor-pointer px-4 py-2.5 flex items-center gap-2 font-bold ${tab === 'liabilities' || tab === 'accrued' ? 'badge-primary shadow-lg' : 'badge-muted'}`}
+          onClick={() => setTab('liabilities')}
         >
-          <AlertTriangle size={16} />
-          المصروفات المستحقة
-        </button>
-
-        <button
-          className={`badge cursor-pointer px-4 py-2.5 flex items-center gap-2 font-bold ${tab === 'advances' ? 'badge-primary shadow-lg' : 'badge-muted'}`}
-          onClick={() => setTab('advances')}
-        >
-          <DollarSign size={16} />
-          الدفعات المقدمة
+          <Clock size={16} />
+          الالتزامات والاستحقاقات المالية
         </button>
 
         <button
@@ -1692,102 +1694,135 @@ export default function AccountingPage() {
       )}
 
       {/* ───────────────────────────────────────────────────────────────────────────── */}
-      {/* 6. ACCRUED EXPENSES TAB */}
+      {/* 6. UNIFIED LIABILITIES TAB */}
       {/* ───────────────────────────────────────────────────────────────────────────── */}
-      {tab === 'accrued' && (
+      {(tab === 'liabilities' || tab === 'accrued' || tab === 'advances') && (
         <div className="glass-card p-6 flex flex-col gap-4">
-          <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: 'var(--clr-border)' }}>
+          <div className="flex items-center justify-between border-b pb-3 flex-wrap gap-3" style={{ borderColor: 'var(--clr-border)' }}>
             <div>
-              <h3 className="font-bold text-lg">المصروفات المستحقة واجبة السداد</h3>
-              <p className="text-xs" style={{ color: 'var(--clr-muted)' }}>مصروفات مدرجة بقائمة الدخل والتزام بقائمة المركز المالي حتى سدادها</p>
+              <h3 className="font-bold text-lg text-amber-400 flex items-center gap-2">
+                <Clock size={20} />
+                سجل الالتزامات والاستحقاقات المالية الموحد
+              </h3>
+              <p className="text-xs text-[var(--clr-muted)] mt-0.5">
+                تدرج الالتزامات كخصوم متداولة بالميزانية مع توجيه الطرف المدين (مصروف، أصل ثابت، أصل متداول، سلفة)
+              </p>
             </div>
-            <button className="btn-primary flex items-center gap-2" onClick={() => setShowAddAccruedModal(true)}>
-              <Plus size={16} />
-              تسجيل مصروف مستحق جديد
-            </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                className="btn-secondary text-xs flex items-center gap-1.5 font-bold cursor-pointer"
+                onClick={async () => {
+                  const t = toast.loading('جاري تصدير دفتر أستاذ الالتزامات لـ Excel...')
+                  try {
+                    await exportLiabilitiesExcel(liabilitiesList)
+                    toast.success('تم تصدير دفتر أستاذ الالتزامات بنجاح!', { id: t })
+                  } catch (e: any) {
+                    toast.error('فشل التصدير: ' + e.toString(), { id: t })
+                  }
+                }}
+              >
+                <FileSpreadsheet size={15} className="text-emerald-400" />
+                تصدير دفتر الأستاذ Excel
+              </button>
+              <button className="btn-primary flex items-center gap-2 font-bold text-xs" onClick={() => setShowAddLiabilityModal(true)}>
+                <Plus size={16} />
+                تسجيل التزام مالي جديد
+              </button>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-right text-sm">
               <thead>
                 <tr className="border-b" style={{ borderColor: 'var(--clr-border)' }}>
-                  <th className="py-3 px-2 font-bold">المصروف</th>
-                  <th className="py-3 px-2 font-bold">المبلغ</th>
-                  <th className="py-3 px-2 font-bold">التصنيف</th>
+                  <th className="py-3 px-2 font-bold">البيان / الالتزام</th>
+                  <th className="py-3 px-2 font-bold">الجهة الدائنة</th>
+                  <th className="py-3 px-2 font-bold">الحساب المدين المقابل</th>
+                  <th className="py-3 px-2 font-bold">القيمة الإجمالية</th>
+                  <th className="py-3 px-2 font-bold">المسدد</th>
+                  <th className="py-3 px-2 font-bold">المتبقي</th>
                   <th className="py-3 px-2 font-bold">تاريخ الاستحقاق</th>
                   <th className="py-3 px-2 font-bold">الحالة</th>
-                  <th className="py-3 px-2 font-bold">الإجراءات</th>
+                  <th className="py-3 px-2 font-bold">الإجراءات ودفتر الأستاذ</th>
                 </tr>
               </thead>
               <tbody className="divide-y" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
-                {accruedList.map(item => (
-                  <tr key={item.id} className="hover:bg-white/5 transition-colors">
-                    <td className="py-3 px-2 font-bold">{item.title}</td>
-                    <td className="py-3 px-2 font-mono font-bold text-red-400">{formatEGP(item.amount)}</td>
-                    <td className="py-3 px-2 text-xs">{item.category_name || 'عام'}</td>
-                    <td className="py-3 px-2 text-xs font-mono">{item.due_date || 'غير محدد'}</td>
-                    <td className="py-3 px-2">
-                      <span className={`badge ${item.status === 'paid' ? 'badge-success' : 'badge-danger'}`}>
-                        {item.status === 'paid' ? 'مسدد' : 'مستحق وغير مسدد'}
-                      </span>
-                    </td>
-                    <td className="py-3 px-2">
-                      {item.status === 'unpaid' && (
-                        <button
-                          className="btn-primary text-xs py-1"
-                          onClick={() => setShowPayAccruedModal(item)}
-                        >
-                          سداد الآن
-                        </button>
-                      )}
+                {liabilitiesList.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="text-center py-8 text-xs font-bold" style={{ color: 'var(--clr-muted)' }}>
+                      لا توجد التزامات مالية مسجلة بالنظام حتى الآن
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+                ) : (
+                  liabilitiesList.map(liab => {
+                    let debitLabel = 'مصروف مؤجل / مستحق'
+                    if (liab.debit_counterpart_type === 'fixed_asset') debitLabel = 'أصل ثابت (معدات/أجهزة)'
+                    else if (liab.debit_counterpart_type === 'current_asset') debitLabel = 'أصل متداول (مخزون)'
+                    else if (liab.debit_counterpart_type === 'cash_advance') debitLabel = 'سلفة نقدية / ذمم مدنية'
 
-      {/* ───────────────────────────────────────────────────────────────────────────── */}
-      {/* 7. CUSTOMER ADVANCES TAB */}
-      {/* ───────────────────────────────────────────────────────────────────────────── */}
-      {tab === 'advances' && (
-        <div className="glass-card p-6 flex flex-col gap-4">
-          <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: 'var(--clr-border)' }}>
-            <div>
-              <h3 className="font-bold text-lg">الدفعات المقدمة من العملاء</h3>
-              <p className="text-xs" style={{ color: 'var(--clr-muted)' }}>مبالغ مقدمة لخدمات صيانة أو مشتريات تسجل كالتزام متداول حتى تسليمها</p>
-            </div>
-            <button className="btn-primary flex items-center gap-2" onClick={() => setShowAddAdvanceModal(true)}>
-              <Plus size={16} />
-              استلام دفعة مقدمة
-            </button>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-right text-sm">
-              <thead>
-                <tr className="border-b" style={{ borderColor: 'var(--clr-border)' }}>
-                  <th className="py-3 px-2 font-bold">اسم العميل</th>
-                  <th className="py-3 px-2 font-bold">إجمالي الدفعة</th>
-                  <th className="py-3 px-2 font-bold">المستخدم منها</th>
-                  <th className="py-3 px-2 font-bold">المتبقي كالتزام</th>
-                  <th className="py-3 px-2 font-bold">الحساب المستلم</th>
-                  <th className="py-3 px-2 font-bold">التاريخ</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
-                {advancesList.map(item => (
-                  <tr key={item.id} className="hover:bg-white/5 transition-colors">
-                    <td className="py-3 px-2 font-bold">{item.customer_name}</td>
-                    <td className="py-3 px-2 font-mono">{formatEGP(item.amount)}</td>
-                    <td className="py-3 px-2 font-mono text-amber-400">{formatEGP(item.used_amount)}</td>
-                    <td className="py-3 px-2 font-mono font-bold text-emerald-400">{formatEGP(item.remaining_amount)}</td>
-                    <td className="py-3 px-2 text-xs" style={{ color: 'var(--clr-accent)' }}>{item.financial_account_name}</td>
-                    <td className="py-3 px-2 font-mono text-xs">{formatDate(item.created_at)}</td>
-                  </tr>
-                ))}
+                    return (
+                      <tr key={liab.id} className="hover:bg-white/5 transition-colors">
+                        <td className="py-3 px-2 font-bold">{liab.title}</td>
+                        <td className="py-3 px-2 text-xs font-semibold text-amber-300">{liab.creditor_name}</td>
+                        <td className="py-3 px-2 text-xs">
+                          <span className="badge badge-neutral text-[11px]">{debitLabel}</span>
+                        </td>
+                        <td className="py-3 px-2 font-mono font-bold">{formatEGP(liab.amount)}</td>
+                        <td className="py-3 px-2 font-mono font-bold text-emerald-400">{formatEGP(liab.paid_amount)}</td>
+                        <td className="py-3 px-2 font-mono font-bold text-red-400">{formatEGP(liab.remaining_amount)}</td>
+                        <td className="py-3 px-2 font-mono text-xs">{formatDate(liab.due_date)}</td>
+                        <td className="py-3 px-2">
+                          <span className={`badge ${liab.status === 'paid' ? 'badge-success' : liab.status === 'partially_paid' ? 'badge-warning' : 'badge-danger'}`}>
+                            {liab.status === 'paid' ? 'مسدد بالكامل' : liab.status === 'partially_paid' ? 'سداد جزئي' : 'غير مسدد'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-2 flex items-center gap-1.5">
+                          <button
+                            className="btn-secondary py-1 px-2 text-xs flex items-center gap-1"
+                            onClick={async () => {
+                              setSelectedLedgerLiability(liab)
+                              setLoadingLedger(true)
+                              try {
+                                const entries = await getLiabilityLedger(liab.id)
+                                setLedgerEntries(entries || [])
+                              } catch { toast.error('فشل تحميل دفتر الأستاذ للالتزام') }
+                              finally { setLoadingLedger(false) }
+                            }}
+                            title="عرض دفتر الأستاذ والتفاصيل"
+                          >
+                            <Eye size={14} className="text-indigo-400" />
+                            دفتر الأستاذ
+                          </button>
+                          {liab.status !== 'paid' && (
+                            <button
+                              className="btn-primary py-1 px-2.5 text-xs font-bold"
+                              onClick={() => {
+                                setShowPayLiabilityModal(liab)
+                                setPayAmount(liab.remaining_amount.toString())
+                              }}
+                            >
+                              سداد دفعة
+                            </button>
+                          )}
+                          <button
+                            className="p-1.5 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors"
+                            onClick={async () => {
+                              if (!window.confirm('هل أنت متأكد من حذف هذا الالتزام المالي بالكامل؟')) return
+                              try {
+                                await deleteLiability(liab.id)
+                                toast.success('تم حذف الالتزام بنجاح')
+                                loadData()
+                              } catch (e: any) { toast.error('فشل الحذف: ' + e.toString()) }
+                            }}
+                            title="حذف الالتزام"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
               </tbody>
             </table>
           </div>
@@ -2372,6 +2407,226 @@ export default function AccountingPage() {
           account={selectedAccountForMovements}
           onClose={() => setSelectedAccountForMovements(null)}
         />
+      )}
+
+      {/* Add New Liability Modal (تسجيل التزام جديد بالقيد المزدوج) */}
+      {showAddLiabilityModal && (
+        <div className="modal-overlay">
+          <form onSubmit={async (e) => {
+            e.preventDefault()
+            const amt = parseFloat(liabAmount)
+            if (!amt || amt <= 0) return toast.error('يرجى إدخال مبلغ التزام صحيح')
+            if (!liabTitle.trim()) return toast.error('يرجى إدخال اسم البيان / الالتزام')
+            if (!liabCreditor.trim()) return toast.error('يرجى إدخال اسم الجهة الدائنة / المستحق له')
+            try {
+              await createLiability({
+                title: liabTitle.trim(),
+                amount: amt,
+                creditor_name: liabCreditor.trim(),
+                debit_counterpart_type: liabDebitType,
+                due_date: liabDueDate,
+                notes: liabNotes.trim() || undefined,
+                created_by: user?.display_name || user?.username,
+              })
+              toast.success('تم تسجيل الالتزام المالي وتوجيه الحساب المدين المقابل بالميزانية بنجاح!')
+              setShowAddLiabilityModal(false)
+              setLiabTitle('')
+              setLiabAmount('')
+              setLiabCreditor('')
+              setLiabNotes('')
+              loadData()
+            } catch (err: any) {
+              toast.error('فشل تسجيل الالتزام: ' + err.toString())
+            }
+          }} className="modal-content p-6 flex flex-col gap-4 max-w-xl">
+            <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: 'var(--clr-border)' }}>
+              <div className="flex items-center gap-2 text-amber-400 font-bold text-lg">
+                <Clock size={22} />
+                <span>تسجيل التزام مالي جديد (قيد مزدوج)</span>
+              </div>
+              <button type="button" className="btn-icon" onClick={() => setShowAddLiabilityModal(false)}>✕</button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-bold block mb-1">اسم الالتزام / البيان:</label>
+                <input className="input w-full" value={liabTitle} onChange={e => setLiabTitle(e.target.value)} placeholder="مثال: شراء أجهزة بالآجل / إيجارات مستحقة" required />
+              </div>
+              <div>
+                <label className="text-xs font-bold block mb-1">اسم الجهة الدائنة (المستحق له):</label>
+                <input className="input w-full" value={liabCreditor} onChange={e => setLiabCreditor(e.target.value)} placeholder="مثال: شركة الأجهزة / المالك" required />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-bold block mb-1">مبلغ الالتزام الإجمالي (ج.م):</label>
+                <input type="number" step="any" className="input w-full font-mono text-base font-bold text-amber-400" value={liabAmount} onChange={e => setLiabAmount(e.target.value)} placeholder="0.00" required />
+              </div>
+              <div>
+                <label className="text-xs font-bold block mb-1">تاريخ الاستحقاق الواجب السداد فيه:</label>
+                <input type="date" className="input w-full font-mono text-xs" value={liabDueDate} onChange={e => setLiabDueDate(e.target.value)} required />
+              </div>
+            </div>
+
+            {/* Double-Entry Debit Counterpart Type */}
+            <div className="p-3.5 rounded-xl border bg-black/20 flex flex-col gap-2" style={{ borderColor: 'var(--clr-border)' }}>
+              <label className="text-xs font-bold text-indigo-300 block">
+                ⚖️ الطرف المدين المقابل بالميزانية (Accounting Counterpart Debit):
+              </label>
+              <div className="grid grid-cols-1 gap-2 text-xs font-bold">
+                <label className="flex items-center gap-2 cursor-pointer p-2 rounded-lg bg-white/5 hover:bg-white/10">
+                  <input type="radio" name="debit_type_acc" checked={liabDebitType === 'accrued_expense'} onChange={() => setLiabDebitType('accrued_expense')} />
+                  <span>مصروف مؤجل / مستحق (يندرج في قائمة الدخل وتكلفة الفترة)</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer p-2 rounded-lg bg-white/5 hover:bg-white/10">
+                  <input type="radio" name="debit_type_acc" checked={liabDebitType === 'fixed_asset'} onChange={() => setLiabDebitType('fixed_asset')} />
+                  <span>أصل ثابت (زيادة أصول ثابته: معدات / أجهزة / أثاث بالميزانية)</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer p-2 rounded-lg bg-white/5 hover:bg-white/10">
+                  <input type="radio" name="debit_type_acc" checked={liabDebitType === 'current_asset'} onChange={() => setLiabDebitType('current_asset')} />
+                  <span>أصل متداول / مخزون (زيادة المخزون والبضاعة بالميزانية)</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer p-2 rounded-lg bg-white/5 hover:bg-white/10">
+                  <input type="radio" name="debit_type_acc" checked={liabDebitType === 'cash_advance'} onChange={() => setLiabDebitType('cash_advance')} />
+                  <span>سلفة نقدية / ذمم مدنية أخرى (زيادة الأصول المتداولة المدينة)</span>
+                </label>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold block mb-1">ملاحظات وشروط السداد:</label>
+              <input className="input w-full text-xs" value={liabNotes} onChange={e => setLiabNotes(e.target.value)} placeholder="ملاحظات اختيارية..." />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t" style={{ borderColor: 'var(--clr-border)' }}>
+              <button type="button" className="btn-secondary" onClick={() => setShowAddLiabilityModal(false)}>إلغاء</button>
+              <button type="submit" className="btn-primary">تأكيد وتسجيل الالتزام المالي</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Pay Liability Modal */}
+      {showPayLiabilityModal && (
+        <div className="modal-overlay">
+          <form onSubmit={async (e) => {
+            e.preventDefault()
+            const amt = parseFloat(payAmount)
+            if (!amt || amt <= 0) return toast.error('يرجى إدخال مبلغ سداد صحيح')
+            if (amt > showPayLiabilityModal.remaining_amount + 0.01) {
+              return toast.error(`مبلغ السداد أكبر من الرصيد المتبقي على الالتزام`)
+            }
+            try {
+              await payLiability({
+                liability_id: showPayLiabilityModal.id,
+                amount: amt,
+                financial_account_id: payAccount,
+                notes: payNotes.trim() || undefined,
+                paid_by: user?.display_name || user?.username,
+              })
+              toast.success('تم سداد الدفعة بنجاح وخصم المبلغ من الحساب النقدي وتحديث الالتزام!')
+              setShowPayLiabilityModal(null)
+              setPayAmount('')
+              setPayNotes('')
+              loadData()
+            } catch (err: any) {
+              toast.error('فشل عملية السداد: ' + err.toString())
+            }
+          }} className="modal-content p-6 flex flex-col gap-4 max-w-md">
+            <h3 className="font-bold text-lg border-b pb-2 text-amber-400">
+              سداد دفعة للالتزام ({showPayLiabilityModal.title})
+            </h3>
+
+            <div className="flex justify-between items-center bg-black/20 p-3 rounded-xl border" style={{ borderColor: 'var(--clr-border)' }}>
+              <div>
+                <span className="text-xs font-bold block text-[var(--clr-muted)]">إجمالي الالتزام:</span>
+                <span className="font-mono text-sm font-bold">{formatEGP(showPayLiabilityModal.amount)}</span>
+              </div>
+              <div className="text-left">
+                <span className="text-xs font-bold block text-[var(--clr-muted)]">المتبقي واجب السداد:</span>
+                <span className="font-mono text-base font-black text-red-400">{formatEGP(showPayLiabilityModal.remaining_amount)}</span>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold block mb-1">المبلغ المسدد الآن (ج.م):</label>
+              <input type="number" step="any" className="input w-full font-mono text-lg font-black text-emerald-400" value={payAmount} onChange={e => setPayAmount(e.target.value)} required />
+            </div>
+
+            <div>
+              <label className="text-xs font-bold block mb-1">اختر الحساب النقدي للخصم السداد منه:</label>
+              <select className="input w-full text-xs font-bold" value={payAccount} onChange={e => setPayAccount(e.target.value)}>
+                {accountsList.map(a => (
+                  <option key={a.id} value={a.id}>{a.name_ar} (الرصيد المتاح: {formatEGP(a.balance)})</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold block mb-1">ملاحظات ورقم السند:</label>
+              <input className="input w-full text-xs" value={payNotes} onChange={e => setPayNotes(e.target.value)} placeholder="مثال: سداد دفعة عن طريق تحويل بنكي..." />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t" style={{ borderColor: 'var(--clr-border)' }}>
+              <button type="button" className="btn-secondary" onClick={() => setShowPayLiabilityModal(null)}>إلغاء</button>
+              <button type="submit" className="btn-primary">تأكيد السداد والخصم من الحساب</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Liability General Ledger Modal */}
+      {selectedLedgerLiability && (
+        <div className="modal-overlay">
+          <div className="modal-content p-6 flex flex-col gap-4 max-w-3xl max-h-[88vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: 'var(--clr-border)' }}>
+              <div>
+                <h3 className="font-bold text-lg text-indigo-300 flex items-center gap-2">
+                  <FileSpreadsheet size={20} />
+                  دفتر أستاذ الالتزام: {selectedLedgerLiability.title}
+                </h3>
+                <p className="text-xs text-[var(--clr-muted)] mt-0.5">
+                  الدائن: <strong className="text-amber-400">{selectedLedgerLiability.creditor_name}</strong> | إجمالي الدين: <strong className="font-mono">{formatEGP(selectedLedgerLiability.amount)}</strong>
+                </p>
+              </div>
+              <button type="button" className="btn-icon" onClick={() => setSelectedLedgerLiability(null)}>✕</button>
+            </div>
+
+            {loadingLedger ? (
+              <div className="text-center py-8 text-xs text-[var(--clr-muted)]">جاري تحميل حركات دفتر الأستاذ...</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-right text-xs">
+                  <thead>
+                    <tr className="border-b text-[var(--clr-muted)] font-semibold" style={{ borderColor: 'var(--clr-border)' }}>
+                      <th className="py-2 px-2">التاريخ</th>
+                      <th className="py-2 px-2">البيان والحركة المحاسبية</th>
+                      <th className="py-2 px-2">دائن (نشوء الالتزام)</th>
+                      <th className="py-2 px-2">مدين (سداد الحساب)</th>
+                      <th className="py-2 px-2">الرصيد المتبقي بعد الحركة</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+                    {ledgerEntries.map(e => (
+                      <tr key={e.id} className="hover:bg-white/5">
+                        <td className="py-2.5 px-2 font-mono text-[11px]">{formatDate(e.tx_date)}</td>
+                        <td className="py-2.5 px-2 font-bold">{e.description}</td>
+                        <td className="py-2.5 px-2 font-mono font-bold text-amber-400">{e.credit_amount > 0 ? formatEGP(e.credit_amount) : '-'}</td>
+                        <td className="py-2.5 px-2 font-mono font-bold text-emerald-400">{e.debit_amount > 0 ? formatEGP(e.debit_amount) : '-'}</td>
+                        <td className="py-2.5 px-2 font-mono font-black text-red-400">{formatEGP(e.balance_after)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <div className="flex justify-end pt-3 border-t" style={{ borderColor: 'var(--clr-border)' }}>
+              <button type="button" className="btn-secondary text-xs" onClick={() => setSelectedLedgerLiability(null)}>إغلاق النافذة</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
