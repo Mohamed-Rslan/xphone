@@ -9,7 +9,7 @@ export const logout = (sessionId: string) =>
 
 export const getUsers = () => invoke<any[]>('get_users')
 
-export const createUser = (payload: { username: string; display_name: string; password: string; role: string }) =>
+export const createUser = (payload: { username: string; display_name: string; password: string; role: string; phone?: string; permissions?: string[]; job_title?: string }) =>
   invoke<any>('create_user', { payload })
 
 // ─── Products ───────────────────────────────────────────────────
@@ -315,6 +315,7 @@ export const updateUserPermissions = (payload: {
   phone?: string | null
   permissions: string[]
   new_password?: string | null
+  job_title?: string | null
 }) => invoke<void>('update_user_permissions', { payload })
 
 export const requestWhatsappOtp = (username: string) =>
