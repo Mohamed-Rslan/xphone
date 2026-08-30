@@ -97,6 +97,11 @@ export function monthStart(): string {
   return format(new Date(d.getFullYear(), d.getMonth(), 1), 'yyyy-MM-dd')
 }
 
+export function monthEnd(): string {
+  const d = new Date()
+  return format(new Date(d.getFullYear(), d.getMonth() + 1, 0), 'yyyy-MM-dd')
+}
+
 export function yearStart(): string {
   return format(new Date(new Date().getFullYear(), 0, 1), 'yyyy-MM-dd')
 }

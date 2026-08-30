@@ -9,7 +9,7 @@ import {
   getFinancialAccounts, createFinancialAccount, updateFinancialAccountLimits,
   transferFinancialAmount, getAccountAlerts, createCashAudit, getCashAudits
 } from '../../lib/commands'
-import { formatEGP, formatDateTime, formatDate, formatTime, today } from '../../lib/utils'
+import { formatEGP, formatDateTime, formatDate, formatTime, today, monthStart, monthEnd } from '../../lib/utils'
 import { exportCashAuditExcel, exportPeriodCashMovementsExcel } from '../../lib/excel'
 import ExportReportModal from '../../components/ExportReportModal'
 import CashAccountMovementsModal from '../../components/CashAccountMovementsModal'
@@ -237,9 +237,8 @@ export default function AccountsPage() {
     setLimitMin(acc.min_balance_limit != null ? acc.min_balance_limit.toString() : '')
     setLimitMax(acc.max_balance_limit != null ? acc.max_balance_limit.toString() : '')
     setDebitLimitAmount(acc.debit_limit_amount != null ? acc.debit_limit_amount.toString() : '')
-    setDebitLimitDays(acc.debit_limit_days != null ? acc.debit_limit_days.toString() : '30')
-    setDebitLimitStartDate(acc.debit_limit_start_date || '')
-    setDebitLimitEndDate(acc.debit_limit_end_date || '')
+    setDebitLimitStartDate(acc.debit_limit_start_date || monthStart())
+    setDebitLimitEndDate(acc.debit_limit_end_date || monthEnd())
     setWarningThresholdPct(acc.warning_threshold_pct != null ? acc.warning_threshold_pct.toString() : '75')
   }
 
