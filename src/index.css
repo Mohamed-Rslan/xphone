@@ -611,16 +611,20 @@ select.input option { background: var(--clr-bg-2); color: var(--clr-text); }
   left: 0 !important;
   right: 0 !important;
   bottom: 0 !important;
-  width: 100vw !important;
-  height: 100vh !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 100% !important;
+  min-height: 100% !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
   z-index: 99999 !important;
-  background: rgba(0,0,0,0.76) !important;
-  backdrop-filter: blur(8px) !important;
-  -webkit-backdrop-filter: blur(8px) !important;
-  padding: 16px !important;
+  background: rgba(0, 0, 0, 0.78) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+  padding: 24px !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
   animation: fadeIn 0.18s ease;
 }
 .modal-content {
@@ -628,15 +632,19 @@ select.input option { background: var(--clr-bg-2); color: var(--clr-text); }
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
   border: var(--glass-border);
-  border-radius: 20px;
+  border-radius: 24px;
   box-shadow: var(--glass-shadow-lg);
   padding: 24px;
   width: 100%;
-  max-width: 580px;
+  max-width: 650px;
   max-height: 90vh;
   overflow-y: auto;
   position: relative;
+  margin: auto !important;
+  align-self: center !important;
+  justify-self: center !important;
   z-index: 100000;
+  box-sizing: border-box;
   animation: scaleIn 0.2s ease;
 }
 

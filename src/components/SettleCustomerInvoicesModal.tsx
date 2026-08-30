@@ -170,7 +170,7 @@ export default function SettleCustomerInvoicesModal({
     <div className="modal-overlay z-50" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div
         className="modal-content p-6 overflow-y-auto"
-        style={{ width: '95vw', maxWidth: '1100px', maxHeight: '92vh' }}
+        style={{ width: '95%', maxWidth: '1100px', maxHeight: '92vh', margin: 'auto' }}
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b pb-3.5 mb-4" style={{ borderColor: 'var(--clr-border)' }}>
