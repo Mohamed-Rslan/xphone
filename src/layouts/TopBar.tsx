@@ -39,7 +39,6 @@ export default function TopBar({ scale, setScale, onMenuToggle }: TopBarProps) {
   const [selectedNotifDetails, setSelectedNotifDetails] = useState<SystemNotification | null>(null)
   const [notifSearch, setNotifSearch] = useState('')
   const [notifFilter, setNotifFilter] = useState<'all' | 'unread' | 'high' | 'medium'>('all')
-  const themeMenuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     loadSettings().catch(console.error)
@@ -68,15 +67,7 @@ export default function TopBar({ scale, setScale, onMenuToggle }: TopBarProps) {
     }
   }
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (themeMenuRef.current && !themeMenuRef.current.contains(event.target as Node)) {
-        setShowThemeMenu(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+
 
   const checkAlerts = async () => {
     try {
