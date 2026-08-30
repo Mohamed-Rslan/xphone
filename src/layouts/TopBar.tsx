@@ -65,9 +65,6 @@ export default function TopBar({ scale, setScale, onMenuToggle }: TopBarProps) {
       if (themeMenuRef.current && !themeMenuRef.current.contains(event.target as Node)) {
         setShowThemeMenu(false)
       }
-      if (notifsMenuRef.current && !notifsMenuRef.current.contains(event.target as Node)) {
-        setShowNotifsMenu(false)
-      }
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
