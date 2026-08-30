@@ -1458,3 +1458,72 @@ export async function exportShareholderLedgerExcel(
   XLSX.writeFile(workbook, filename)
   return true
 }
+
+export async function exportExpensesExcel(
+  expenses: any[],
+  accruedExpenses: any[],
+  dateFrom: string,
+  dateTo: string
+) {
+  const storeName = 'XPhone Store'
+  const workbook = XLSX.utils.book_new()
+
+  const totalCash = expenses.reduce((sum, exp) => sum + (exp.amount || 0), 0)
+  const totalAccrued = accruedExpenses.filter(a => a.status === 'unpaid').reduce((sum, a) => sum + (a.amount || 0), 0)
+
+  const data: any[][] = [
+    [`تقرير المصروفات النقدية والالتزامات المستحقة — ${storeName}`],
+    [`الفترة من: ${formatDate(dateFrom)} إلى ${formatDate(dateTo)} | تاريخ الاستخراج: ${today()}`],
+    [],
+    ['إجمالي المصروفات النقدية الخزنية (ج.م):', totalCash],
+    ['إجمالي المصروفات المستحقة واجبة السداد (ج.م):', totalAccrued],
+    ['الإجمالي الكلي التكليفي للفترة (ج.م):', totalCash + totalAccrued],
+    [],
+    ['1. سجل المصروفات النقدية المسددة من الخزينة والحسابات:'],
+    ['تاريخ المصروف', 'التصنيف', 'البيان والوصف', 'المبلغ (ج.م)', 'طبيعة المصروف', 'حساب الخصم النقدي'],
+  ]
+
+  expenses.forEach(exp => {
+    data.push([
+      exp.expense_date || '—',
+      exp.category_name || 'عام',
+      exp.description || '—',
+      exp.amount || 0,
+      exp.is_recurring ? `دوري (${exp.recurrence || 'monthly'})` : 'عارض',
+      exp.financial_account_name || 'الخزينة الرئيسية',
+    ])
+  })
+
+  data.push([])
+  data.push(['المجموع الكلي للمصروفات النقدية:', '', '', totalCash, '', ''])
+  data.push([])
+  data.push(['2. سجل المصروفات المستحقة والالتزامات (Accrued Liabilities):'])
+  data.push(['عنوان المصروف', 'المبلغ المستحق (ج.م)', 'التصنيف', 'تاريخ الاستحقاق', 'حالة السداد', 'الحساب النقدي المسدد منه'])
+
+  accruedExpenses.forEach(accr => {
+    data.push([
+      accr.title || '—',
+      accr.amount || 0,
+      accr.category_name || 'عام',
+      accr.due_date || 'غير محدد',
+      accr.status === 'paid' ? 'مسدد' : 'مستحق كالتزام',
+      accr.financial_account_name || '—',
+    ])
+  })
+
+  const sheet = XLSX.utils.aoa_to_sheet(data)
+  sheet['!cols'] = [
+    { wch: 20 },
+    { wch: 20 },
+    { wch: 35 },
+    { wch: 18 },
+    { wch: 20 },
+    { wch: 24 },
+  ]
+
+  XLSX.utils.book_append_sheet(workbook, sheet, 'تقرير المصروفات')
+
+  const filename = `Expenses_Report_${dateFrom}_to_${dateTo}.xlsx`
+  XLSX.writeFile(workbook, filename)
+  return true
+}

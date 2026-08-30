@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import {
   Plus, DollarSign, Calendar, Wallet, Calculator,
   TrendingDown, AlertCircle, Clock, CheckCircle2, Trash2, Filter,
-  Edit, Printer
+  Edit, Printer, FileSpreadsheet
 } from 'lucide-react'
 import {
   getExpenses, getExpenseCategories, createExpense, updateExpense, deleteExpense,
@@ -12,6 +12,7 @@ import {
 import { useAuthStore } from '../../store/authStore'
 import { useSettingsStore } from '../../store/settingsStore'
 import { formatEGP, formatDate, monthStart, today } from '../../lib/utils'
+import { exportExpensesExcel } from '../../lib/excel'
 import toast from 'react-hot-toast'
 
 export default function ExpensesPage() {
@@ -332,6 +333,17 @@ export default function ExpensesPage() {
     win.document.close()
   }
 
+  // Export Expenses to Excel
+  const handleExportExcel = async () => {
+    const t = toast.loading('جاري فتح وتوليد ملف Excel للمصروفات...')
+    try {
+      await exportExpensesExcel(filteredExpenses, accruedExpenses, dateFrom, dateTo)
+      toast.success('تم تصدير تقرير المصروفات لـ Excel بنجاح!', { id: t })
+    } catch (err: any) {
+      toast.error('فشل تصدير التقرير: ' + err.toString(), { id: t })
+    }
+  }
+
   // Filtered expenses list
   const filteredExpenses = expenses.filter(exp => {
     if (categoryFilter !== 'all' && exp.category_id.toString() !== categoryFilter) return false
@@ -357,11 +369,20 @@ export default function ExpensesPage() {
           <p className="page-subtitle">تسجيل وإدارة المصروفات النقدية والمستحقة والدورية وفق معايير المحاسبة</p>
         </div>
         <div className="flex gap-2">
-          <button className="btn-secondary flex items-center gap-2 font-bold text-xs" onClick={handlePrintReport}>
+          <button
+            className="btn-secondary flex items-center gap-2 font-bold text-xs cursor-pointer"
+            style={{ borderColor: 'rgba(16,185,129,0.4)', color: '#34d399' }}
+            onClick={handleExportExcel}
+            title="تصدير جميع المصروفات والالتزامات لملف Excel"
+          >
+            <FileSpreadsheet size={16} />
+            تصدير لـ Excel
+          </button>
+          <button className="btn-secondary flex items-center gap-2 font-bold text-xs cursor-pointer" onClick={handlePrintReport}>
             <Printer size={16} />
             طباعة تقرير المصروفات
           </button>
-          <button className="btn-primary flex items-center gap-2 font-bold text-xs" onClick={openAddModal}>
+          <button className="btn-primary flex items-center gap-2 font-bold text-xs cursor-pointer" onClick={openAddModal}>
             <Plus size={18} />
             تسجيل مصروف جديد
           </button>
