@@ -1005,6 +1005,259 @@ pub async fn delete_accrued_expense(state: State<'_, AppState>, id: String) -> R
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// UNIFIED LIABILITIES & ACCRUED OBLIGATIONS (نظام الالتزامات والاستحقاقات المالية الموحد)
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Liability {
+    pub id: String,
+    pub title: String,
+    pub amount: f64,
+    pub paid_amount: f64,
+    pub remaining_amount: f64,
+    pub creditor_name: String,
+    pub debit_counterpart_type: String, // "accrued_expense" | "fixed_asset" | "current_asset" | "cash_advance"
+    pub debit_account_id: Option<String>,
+    pub due_date: String,
+    pub status: String, // "unpaid" | "partially_paid" | "paid"
+    pub notes: Option<String>,
+    pub created_by: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateLiabilityPayload {
+    pub title: String,
+    pub amount: f64,
+    pub creditor_name: String,
+    pub debit_counterpart_type: String,
+    pub debit_account_id: Option<String>,
+    pub due_date: String,
+    pub notes: Option<String>,
+    pub created_by: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PayLiabilityPayload {
+    pub liability_id: String,
+    pub amount: f64,
+    pub financial_account_id: String,
+    pub notes: Option<String>,
+    pub paid_by: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct LiabilityLedgerEntry {
+    pub id: String,
+    pub tx_date: String,
+    pub entry_type: String, // "creation" | "payment"
+    pub description: String,
+    pub credit_amount: f64,
+    pub debit_amount: f64,
+    pub balance_after: f64,
+    pub account_name: Option<String>,
+    pub notes: Option<String>,
+}
+
+#[tauri::command]
+pub async fn get_liabilities(
+    state: State<'_, AppState>,
+    status: Option<String>,
+) -> Result<Vec<Liability>, AppError> {
+    let conn = state.pool.get()?;
+    let mut sql = "SELECT id, title, amount, paid_amount, creditor_name, debit_counterpart_type, debit_account_id, due_date, status, notes, created_by, created_at FROM liabilities".to_string();
+    if let Some(s) = &status {
+        if s != "all" {
+            sql.push_str(&format!(" WHERE status = '{}'", s));
+        }
+    }
+    sql.push_str(" ORDER BY created_at DESC");
+
+    let mut stmt = conn.prepare(&sql)?;
+    let iter = stmt.query_map([], |r| {
+        let amount: f64 = r.get(2)?;
+        let paid_amount: f64 = r.get(3)?;
+        let remaining_amount = (amount - paid_amount).max(0.0);
+        Ok(Liability {
+            id: r.get(0)?,
+            title: r.get(1)?,
+            amount,
+            paid_amount,
+            remaining_amount,
+            creditor_name: r.get(4)?,
+            debit_counterpart_type: r.get(5)?,
+            debit_account_id: r.get(6)?,
+            due_date: r.get(7)?,
+            status: r.get(8)?,
+            notes: r.get(9)?,
+            created_by: r.get(10)?,
+            created_at: r.get(11)?,
+        })
+    })?;
+
+    let mut list = Vec::new();
+    for item in iter {
+        list.push(item?);
+    }
+    Ok(list)
+}
+
+#[tauri::command]
+pub async fn create_liability(
+    state: State<'_, AppState>,
+    payload: CreateLiabilityPayload,
+) -> Result<Liability, AppError> {
+    let conn = state.pool.get()?;
+    let id = Uuid::new_v4().to_string();
+    let now = Utc::now().to_rfc3339();
+
+    conn.execute(
+        "INSERT INTO liabilities (id, title, amount, paid_amount, creditor_name, debit_counterpart_type, debit_account_id, due_date, status, notes, created_by, created_at)
+         VALUES (?1, ?2, ?3, 0.0, ?4, ?5, ?6, ?7, 'unpaid', ?8, ?9, ?10)",
+        rusqlite::params![
+            id, payload.title, payload.amount, payload.creditor_name,
+            payload.debit_counterpart_type, payload.debit_account_id,
+            payload.due_date, payload.notes, payload.created_by, now
+        ],
+    )?;
+
+    // Log notification
+    let _ = crate::commands::notifications::log_system_notification(
+        &conn, None, "سجل الالتزامات المالية", "liability_created",
+        &format!("نشوء التزام جديد: {}", payload.title),
+        Some(&format!("بقيمة {:.2} ج.م للجهة {} (الطرف المدين: {})", payload.amount, payload.creditor_name, payload.debit_counterpart_type))
+    );
+
+    Ok(Liability {
+        id,
+        title: payload.title,
+        amount: payload.amount,
+        paid_amount: 0.0,
+        remaining_amount: payload.amount,
+        creditor_name: payload.creditor_name,
+        debit_counterpart_type: payload.debit_counterpart_type,
+        debit_account_id: payload.debit_account_id,
+        due_date: payload.due_date,
+        status: "unpaid".to_string(),
+        notes: payload.notes,
+        created_by: payload.created_by,
+        created_at: now,
+    })
+}
+
+#[tauri::command]
+pub async fn pay_liability(
+    state: State<'_, AppState>,
+    payload: PayLiabilityPayload,
+) -> Result<(), AppError> {
+    let conn = state.pool.get()?;
+    let now = Utc::now().to_rfc3339();
+    let pid = Uuid::new_v4().to_string();
+
+    let (title, amount, paid_amount): (String, f64, f64) = conn.query_row(
+        "SELECT title, amount, paid_amount FROM liabilities WHERE id = ?1",
+        rusqlite::params![payload.liability_id],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+    )?;
+
+    let new_paid = paid_amount + payload.amount;
+    let new_status = if new_paid >= amount - 0.001 { "paid" } else { "partially_paid" };
+
+    conn.execute(
+        "UPDATE liabilities SET paid_amount = ?1, status = ?2 WHERE id = ?3",
+        rusqlite::params![new_paid, new_status, payload.liability_id],
+    )?;
+
+    conn.execute(
+        "INSERT INTO liability_payments (id, liability_id, amount, financial_account_id, notes, paid_by, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        rusqlite::params![pid, payload.liability_id, payload.amount, payload.financial_account_id, payload.notes, payload.paid_by, now],
+    )?;
+
+    // Log notification
+    let _ = crate::commands::notifications::log_system_notification(
+        &conn, None, "سجل الالتزامات المالية", "liability_paid",
+        &format!("سداد دفعة للالتزام: {}", title),
+        Some(&format!("تم سداد مبلغ {:.2} ج.م (الحالة الجديدة: {})", payload.amount, if new_status == "paid" { "تم السداد بالكامل" } else { "سداد جزئي" }))
+    );
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn delete_liability(state: State<'_, AppState>, id: String) -> Result<(), AppError> {
+    let conn = state.pool.get()?;
+    conn.execute("DELETE FROM liabilities WHERE id = ?1", rusqlite::params![id])?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_liability_ledger(
+    state: State<'_, AppState>,
+    liability_id: String,
+) -> Result<Vec<LiabilityLedgerEntry>, AppError> {
+    let conn = state.pool.get()?;
+    
+    let liability = conn.query_row(
+        "SELECT title, amount, creditor_name, created_at FROM liabilities WHERE id = ?1",
+        rusqlite::params![liability_id],
+        |r| Ok((r.get::<_, String>(0)?, r.get::<_, f64>(1)?, r.get::<_, String>(2)?, r.get::<_, String>(3)?)),
+    )?;
+
+    let mut entries = Vec::new();
+    let mut current_balance = liability.1; // Credit balance (Debt)
+
+    // Entry 1: Creation of liability
+    entries.push(LiabilityLedgerEntry {
+        id: format!("init_{}", liability_id),
+        tx_date: liability.3,
+        entry_type: "creation".to_string(),
+        description: format!("نشوء الالتزام: {} للجهة {}", liability.0, liability.2),
+        credit_amount: liability.1,
+        debit_amount: 0.0,
+        balance_after: current_balance,
+        account_name: None,
+        notes: Some("تسجيل التزام جديد".to_string()),
+    });
+
+    // Payments
+    let mut stmt = conn.prepare(
+        "SELECT lp.id, lp.amount, lp.notes, lp.created_at, fa.name_ar
+         FROM liability_payments lp
+         LEFT JOIN financial_accounts fa ON fa.id = lp.financial_account_id
+         WHERE lp.liability_id = ?1 ORDER BY lp.created_at ASC"
+    )?;
+
+    let p_iter = stmt.query_map(rusqlite::params![liability_id], |r| {
+        Ok((
+            r.get::<_, String>(0)?,
+            r.get::<_, f64>(1)?,
+            r.get::<_, Option<String>>(2)?,
+            r.get::<_, String>(3)?,
+            r.get::<_, Option<String>>(4)?,
+        ))
+    })?;
+
+    for p in p_iter {
+        let (pid, pamt, pnotes, pdate, fa_name) = p?;
+        current_balance = (current_balance - pamt).max(0.0);
+        entries.push(LiabilityLedgerEntry {
+            id: pid,
+            tx_date: pdate,
+            entry_type: "payment".to_string(),
+            description: format!("سداد دفعة من الحساب ({})", fa_name.as_deref().unwrap_or("حساب نقدي")),
+            credit_amount: 0.0,
+            debit_amount: pamt,
+            balance_after: current_balance,
+            account_name: fa_name,
+            notes: pnotes,
+        });
+    }
+
+    Ok(entries)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 6. CUSTOMER ADVANCES & PAYMENTS (الدفعات المقدمة وسداد العملاء)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -2568,19 +2821,13 @@ pub async fn get_balance_sheet(
         [], |r| r.get(0),
     ).unwrap_or(0.0);
 
-    // Unpaid accrued expenses
-    let unpaid_accrued: f64 = conn.query_row(
-        "SELECT COALESCE(SUM(amount), 0.0) FROM accrued_expenses WHERE status='unpaid'",
+    // Unpaid Liabilities & Obligations (جدول الالتزامات والاستحقاقات الموحد)
+    let unpaid_liabilities: f64 = conn.query_row(
+        "SELECT COALESCE(SUM(amount - paid_amount), 0.0) FROM liabilities WHERE status != 'paid'",
         [], |r| r.get(0),
     ).unwrap_or(0.0);
 
-    // Active customer advances (unused portion)
-    let active_advances: f64 = conn.query_row(
-        "SELECT COALESCE(SUM(amount - used_amount), 0.0) FROM customer_advances WHERE status='active'",
-        [], |r| r.get(0),
-    ).unwrap_or(0.0);
-
-    let total_liabilities = accounts_payable + unpaid_accrued + active_advances;
+    let total_liabilities = accounts_payable + unpaid_liabilities;
 
     // 6. Equity
     let shareholders = get_shareholders(state.clone()).await?;
@@ -2612,8 +2859,8 @@ pub async fn get_balance_sheet(
         fixed_assets_net,
         total_assets,
         accounts_payable,
-        accrued_expenses: unpaid_accrued,
-        customer_advances: active_advances,
+        accrued_expenses: unpaid_liabilities,
+        customer_advances: 0.0,
         total_liabilities,
         capital,
         short_term_contributions,

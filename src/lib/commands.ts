@@ -141,6 +141,63 @@ export const createCustomerAdvance = (payload: any) => invoke<any>('create_custo
 export const getCustomerAdvances = (customerId?: string) => invoke<any[]>('get_customer_advances', { customerId })
 export const recordCustomerPayment = (payload: any) => invoke<void>('record_customer_payment', { payload })
 
+// ─── Unified Liabilities & Obligations ───────────────────────────
+export interface Liability {
+  id: string
+  title: string
+  amount: number
+  paid_amount: number
+  remaining_amount: number
+  creditor_name: string
+  debit_counterpart_type: string
+  debit_account_id?: string | null
+  due_date: string
+  status: string
+  notes?: string | null
+  created_by?: string | null
+  created_at: string
+}
+
+export interface LiabilityLedgerEntry {
+  id: string
+  tx_date: string
+  entry_type: string
+  description: string
+  credit_amount: number
+  debit_amount: number
+  balance_after: number
+  account_name?: string | null
+  notes?: string | null
+}
+
+export const getLiabilities = (status?: string) =>
+  invoke<Liability[]>('get_liabilities', { status })
+
+export const createLiability = (payload: {
+  title: string
+  amount: number
+  creditor_name: string
+  debit_counterpart_type: string
+  debit_account_id?: string | null
+  due_date: string
+  notes?: string | null
+  created_by?: string | null
+}) => invoke<Liability>('create_liability', { payload })
+
+export const payLiability = (payload: {
+  liability_id: string
+  amount: number
+  financial_account_id: string
+  notes?: string | null
+  paid_by?: string | null
+}) => invoke<void>('pay_liability', { payload })
+
+export const deleteLiability = (id: string) =>
+  invoke<void>('delete_liability', { id })
+
+export const getLiabilityLedger = (liabilityId: string) =>
+  invoke<LiabilityLedgerEntry[]>('get_liability_ledger', { liability_id: liabilityId, liabilityId })
+
 // ─── Shareholders & Profit Distribution ─────────────────────────
 export const getShareholders = () => invoke<any[]>('get_shareholders')
 export const createShareholder = (payload: any) => invoke<any>('create_shareholder', { payload })

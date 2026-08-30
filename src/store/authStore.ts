@@ -37,9 +37,10 @@ export const PERMISSIONS_LIST: PermissionDefinition[] = [
   { key: 'income_statement_view', labelAr: 'الاطلاع على قائمة الدخل وتصدير الأرباح', category: 'التقارير المحاسبية', isSensitive: false, description: 'عرض صافي الربح وقائمة الدخل وتصدير إكسيل الأرباح' },
   { key: 'balance_sheet_view', labelAr: 'الاطلاع على قائمة المركز المالي (الميزانية)', category: 'التقارير المحاسبية', isSensitive: false, description: 'عرض الميزانية العمومية والمركز المالي وتصدير الإكسيل' },
   
-  // Expenses
-  { key: 'expenses_create', labelAr: 'إدخال وتسجيل المصروفات النقدية والمستحقة', category: 'المصروفات', isSensitive: false, description: 'إنشاء وتسجيل المصروفات النقدية والمستحقة' },
-  { key: 'expenses_edit_delete', labelAr: 'تعديل وحذف المصروفات المسجلة والالتزامات', category: 'المصروفات', isSensitive: true, description: 'تعديل أو حذف المصروفات النقدية والمستحقة (يولد إشعار للمدير)' },
+  // Expenses & Liabilities
+  { key: 'expenses_create', labelAr: 'إدخال وتسجيل المصروفات النقدية والالتزامات', category: 'المصروفات والالتزامات', isSensitive: false, description: 'إنشاء وتسجيل المصروفات النقدية' },
+  { key: 'expenses_edit_delete', labelAr: 'تعديل وحذف المصروفات المسجلة', category: 'المصروفات والالتزامات', isSensitive: true, description: 'تعديل أو حذف المصروفات النقدية المسجلة (يولد إشعار للمدير)' },
+  { key: 'manage_liabilities', labelAr: 'إدارة الالتزامات والاستحقاقات المالية', category: 'المصروفات والالتزامات', isSensitive: true, description: 'إنشاء وتسديد وتصدير الالتزامات والاستحقاقات المالية الموحدة' },
   
   // Settings
   { key: 'settings_manage', labelAr: 'إدارة الإعدادات والمستخدمين والصلاحيات', category: 'النظام', isSensitive: true, description: 'تعديل بيانات المتجر والمظهر وإدارة المستخدمين' },

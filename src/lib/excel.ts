@@ -4,6 +4,7 @@ import {
   getSales, getPurchaseOrders, getCashMovementsReport, getDamagedGoods
 } from './commands'
 import { formatEGP, formatDate, formatDateTime, today } from './utils'
+import { useSettingsStore } from '../store/settingsStore'
 import { invoke } from '@tauri-apps/api/core'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1583,5 +1584,87 @@ export async function exportExpensesExcel(
   XLSX.utils.book_append_sheet(workbook, summarySheet, 'الملخص الشامل')
 
   const filename = `Expenses_Report_${dateFrom}_to_${dateTo}.xlsx`
+  return await saveExcelWithDialog(workbook, filename)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 10. UNIFIED LIABILITIES EXPORT (تصدير سجل ودفتر أستاذ الالتزامات المالية)
+// ─────────────────────────────────────────────────────────────────────────────
+export async function exportLiabilitiesExcel(liabilities: any[]): Promise<boolean> {
+  const storeName = useSettingsStore.getState().storeName || 'XPhone'
+  const workbook = XLSX.utils.book_new()
+
+  const headers = ['م', 'اسم الالتزام / البيان', 'اسم الجهة الدائنة / المستحق له', 'نوع الحساب المدين المقابل', 'تاريخ الاستحقاق', 'القيمة الإجمالية (ج.م)', 'المسدد (ج.م)', 'المتبقي (ج.م)', 'الحالة', 'تاريخ النشوء', 'ملاحظات']
+  
+  const totalAmount = liabilities.reduce((sum, l) => sum + (l.amount || 0), 0)
+  const totalPaid = liabilities.reduce((sum, l) => sum + (l.paid_amount || 0), 0)
+  const totalRemaining = liabilities.reduce((sum, l) => sum + (l.remaining_amount || 0), 0)
+
+  const rows: any[][] = liabilities.map((l, idx) => {
+    let typeLabel = 'مصروف مؤجل / مستحق'
+    if (l.debit_counterpart_type === 'fixed_asset') typeLabel = 'أصل ثابت (معدات / أجهزة)'
+    else if (l.debit_counterpart_type === 'current_asset') typeLabel = 'أصل متداول / مخزون'
+    else if (l.debit_counterpart_type === 'cash_advance') typeLabel = 'سلفة نقدية / ذمم مدنية'
+
+    let statusTxt = 'غير مسدد'
+    if (l.status === 'paid') statusTxt = 'تم السداد بالكامل'
+    else if (l.status === 'partially_paid') statusTxt = 'سداد جزئي'
+
+    return [
+      idx + 1,
+      l.title,
+      l.creditor_name,
+      typeLabel,
+      formatDate(l.due_date),
+      l.amount,
+      l.paid_amount,
+      l.remaining_amount,
+      statusTxt,
+      formatDate(l.created_at),
+      l.notes || '-'
+    ]
+  })
+
+  rows.push([
+    { v: 'الإجمالي الكلي', t: 's', s: styles.totalRow },
+    { v: `${liabilities.length} التزامات`, t: 's', s: styles.totalRow },
+    { v: '-', t: 's', s: styles.totalRow },
+    { v: '-', t: 's', s: styles.totalRow },
+    { v: '-', t: 's', s: styles.totalRow },
+    { v: totalAmount, t: 'n', s: styles.totalRow },
+    { v: totalPaid, t: 'n', s: styles.totalRow },
+    { v: totalRemaining, t: 'n', s: styles.totalRow },
+    { v: '-', t: 's', s: styles.totalRow },
+    { v: '-', t: 's', s: styles.totalRow },
+    { v: '-', t: 's', s: styles.totalRow },
+  ])
+
+  const colWidths = [
+    { wch: 6 },
+    { wch: 30 },
+    { wch: 25 },
+    { wch: 25 },
+    { wch: 15 },
+    { wch: 20 },
+    { wch: 20 },
+    { wch: 20 },
+    { wch: 18 },
+    { wch: 15 },
+    { wch: 30 },
+  ]
+
+  const sheet = buildFormattedSheet(
+    `دفتر أستاذ وتقرير الالتزامات والاستحقاقات المالية — ${storeName}`,
+    today(),
+    today(),
+    headers,
+    rows,
+    colWidths,
+    `إجمالي الالتزامات: ${formatEGP(totalAmount)}  |  المسدد: ${formatEGP(totalPaid)}  |  المتبقي المباشر واجب السداد: ${formatEGP(totalRemaining)}`
+  )
+
+  XLSX.utils.book_append_sheet(workbook, sheet, 'سجل الالتزامات المالية')
+
+  const filename = `Liabilities_Report_${today()}.xlsx`
   return await saveExcelWithDialog(workbook, filename)
 }

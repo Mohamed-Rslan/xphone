@@ -797,13 +797,8 @@ export default function AccountingPage() {
                   </div>
 
                   <div className="flex justify-between items-center py-2 px-3 rounded-lg" style={{ background: 'var(--clr-surface-2)' }}>
-                    <span className="text-sm font-medium">مصروفات مستحقة واجبة السداد (Accrued Expenses)</span>
-                    <span className="font-bold">{formatEGP(balanceSheet.accrued_expenses)}</span>
-                  </div>
-
-                  <div className="flex justify-between items-center py-2 px-3 rounded-lg" style={{ background: 'var(--clr-surface-2)' }}>
-                    <span className="text-sm font-medium">دفعات مقدمة من العملاء (Customer Advances)</span>
-                    <span className="font-bold">{formatEGP(balanceSheet.customer_advances)}</span>
+                    <span className="text-sm font-medium">الالتزامات والاستحقاقات المالية الموحدة (Liabilities & Accrued Obligations)</span>
+                    <span className="font-bold text-amber-400">{formatEGP(balanceSheet.accrued_expenses)}</span>
                   </div>
                 </div>
               </div>

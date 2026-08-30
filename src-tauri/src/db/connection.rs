@@ -19,6 +19,7 @@ const MIGRATION_011: &str = include_str!("migrations/011_cash_adjustments.sql");
 const MIGRATION_012: &str = include_str!("migrations/012_equity_short_term_withdrawal.sql");
 const MIGRATION_013: &str = include_str!("migrations/013_account_debit_limits.sql");
 const MIGRATION_014: &str = include_str!("migrations/014_account_debit_date_ranges.sql");
+const MIGRATION_015: &str = include_str!("migrations/015_unified_liabilities.sql");
 
 pub fn init_pool(db_path: &Path) -> Result<DbPool> {
     let manager = SqliteConnectionManager::file(db_path)
@@ -59,6 +60,7 @@ fn run_migrations(pool: &DbPool) -> Result<()> {
         ("012_equity_short_term_withdrawal", MIGRATION_012),
         ("013_account_debit_limits", MIGRATION_013),
         ("014_account_debit_date_ranges", MIGRATION_014),
+        ("015_unified_liabilities", MIGRATION_015),
     ];
 
     for (name, sql) in migrations {
