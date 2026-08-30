@@ -1,5 +1,6 @@
 use crate::{error::AppError, state::AppState};
 use chrono::Utc;
+use rusqlite::OptionalExtension;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 use uuid::Uuid;
@@ -24,8 +25,29 @@ pub fn log_system_notification(
     title: &str,
     details: Option<&str>,
 ) -> Result<(), rusqlite::Error> {
-    let id = Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
+
+    // Deduplication check: do NOT create duplicate notifications if identical title/details exist!
+    let existing_id: Option<String> = conn
+        .query_row(
+            "SELECT id FROM system_notifications
+             WHERE action_type = ?1 AND title = ?2 AND COALESCE(details, '') = COALESCE(?3, '')
+             ORDER BY created_at DESC LIMIT 1",
+            rusqlite::params![action_type, title, details],
+            |r| r.get(0),
+        )
+        .optional()?;
+
+    if let Some(eid) = existing_id {
+        // Update timestamp & user_name on the existing notification instead of creating a duplicate row!
+        conn.execute(
+            "UPDATE system_notifications SET created_at = ?1, user_name = ?2 WHERE id = ?3",
+            rusqlite::params![now, user_name, eid],
+        )?;
+        return Ok(());
+    }
+
+    let id = Uuid::new_v4().to_string();
 
     conn.execute(
         "INSERT INTO system_notifications (id, user_id, user_name, action_type, title, details, is_read, created_at)
@@ -57,9 +79,10 @@ pub async fn get_system_notifications(
     };
 
     let sql = format!(
-        "SELECT id, user_id, user_name, action_type, title, details, is_read, created_at
+        "SELECT id, user_id, user_name, action_type, title, details, MIN(is_read) as is_read, MAX(created_at) as created_at
          FROM system_notifications
          {}
+         GROUP BY action_type, title, COALESCE(details, '')
          ORDER BY created_at DESC
          LIMIT {}",
         where_clause, lim
