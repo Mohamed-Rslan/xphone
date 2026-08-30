@@ -305,7 +305,7 @@ export default function ExpensesPage() {
               ${filteredExpenses.length === 0 ? '<tr><td colspan="6" style="text-align:center; padding: 20px;">لا توجد مصروفات نقدية مسجلة لهذه الفترة</td></tr>' : 
                 filteredExpenses.map(exp => `
                   <tr>
-                    <td style="font-family: monospace;">${exp.expense_date}</td>
+                    <td style="font-family: monospace;">${formatDate(exp.expense_date)}</td>
                     <td><strong>${exp.category_name}</strong></td>
                     <td>${exp.description || '—'}</td>
                     <td className="amount">${formatEGP(exp.amount)}</td>
@@ -512,7 +512,7 @@ export default function ExpensesPage() {
                 ) : (
                   filteredExpenses.map(exp => (
                     <tr key={exp.id} className="hover:bg-white/5 transition-colors">
-                      <td className="py-3 px-2 font-mono text-xs">{exp.expense_date}</td>
+                      <td className="py-3 px-2 font-mono text-xs">{formatDate(exp.expense_date)}</td>
                       <td className="py-3 px-2 font-bold">{exp.category_name}</td>
                       <td className="py-3 px-2 text-xs">{exp.description || '—'}</td>
                       <td className="py-3 px-2 font-mono font-bold text-red-400">{formatEGP(exp.amount)}</td>
@@ -588,7 +588,7 @@ export default function ExpensesPage() {
                       <td className="py-3 px-2 font-bold">{accr.title}</td>
                       <td className="py-3 px-2 font-mono font-bold text-amber-400">{formatEGP(accr.amount)}</td>
                       <td className="py-3 px-2 text-xs">{accr.category_name || 'عام'}</td>
-                      <td className="py-3 px-2 font-mono text-xs">{accr.due_date || 'غير محدد'}</td>
+                      <td className="py-3 px-2 font-mono text-xs">{formatDate(accr.due_date) || 'غير محدد'}</td>
                       <td className="py-3 px-2">
                         <span className={`badge ${accr.status === 'paid' ? 'badge-success' : 'badge-danger'}`}>
                           {accr.status === 'paid' ? 'مسدد' : 'مستحق كالتزام'}

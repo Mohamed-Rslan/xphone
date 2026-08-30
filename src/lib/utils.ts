@@ -29,7 +29,19 @@ export function formatNumber(n: number): string {
 export function formatDate(dateStr: string): string {
   if (!dateStr) return ''
   try {
-    const d = new Date(dateStr)
+    const clean = dateStr.trim()
+    // YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) {
+      const [y, m, d] = clean.split('-')
+      return `${d}/${m}/${y}`
+    }
+    // YYYY-MM-DDTHH:mm...
+    if (/^\d{4}-\d{2}-\d{2}T/.test(clean)) {
+      const datePart = clean.split('T')[0]
+      const [y, m, d] = datePart.split('-')
+      return `${d}/${m}/${y}`
+    }
+    const d = new Date(clean)
     if (isNaN(d.getTime())) return dateStr
     const day = String(d.getDate()).padStart(2, '0')
     const month = String(d.getMonth() + 1).padStart(2, '0')
@@ -43,8 +55,9 @@ export function formatDate(dateStr: string): string {
 export function formatDateTime(dateStr: string): string {
   if (!dateStr) return ''
   try {
-    const d = new Date(dateStr)
-    if (isNaN(d.getTime())) return dateStr
+    const clean = dateStr.trim()
+    const d = new Date(clean)
+    if (isNaN(d.getTime())) return formatDate(clean)
     const day = String(d.getDate()).padStart(2, '0')
     const month = String(d.getMonth() + 1).padStart(2, '0')
     const year = d.getFullYear()
@@ -55,7 +68,7 @@ export function formatDateTime(dateStr: string): string {
     const hoursStr = String(hours).padStart(2, '0')
     return `${day}/${month}/${year} ${hoursStr}:${minutes} ${period}`
   } catch {
-    return dateStr
+    return formatDate(dateStr)
   }
 }
 
