@@ -342,6 +342,21 @@ export interface SystemNotification {
   created_at: string
 }
 
+export interface BroadcastNotification {
+  id: string
+  sender_user_id?: string | null
+  sender_name: string
+  target_role: string
+  title: string
+  message: string
+  severity: string
+  start_time?: string | null
+  end_time?: string | null
+  script_payload?: string | null
+  is_active: boolean
+  created_at: string
+}
+
 export const getSystemNotifications = (limit?: number, unreadOnly?: boolean) =>
   invoke<SystemNotification[]>('get_system_notifications', { limit, unreadOnly })
 
@@ -350,6 +365,24 @@ export const markNotificationAsRead = (id: string) =>
 
 export const markAllNotificationsAsRead = () =>
   invoke<void>('mark_all_notifications_as_read')
+
+export const createBroadcastNotification = (payload: {
+  sender_user_id?: string | null
+  sender_name: string
+  target_role?: string
+  title: string
+  message: string
+  severity?: string
+  start_time?: string | null
+  end_time?: string | null
+  script_payload?: string | null
+}) => invoke<BroadcastNotification>('create_broadcast_notification', { payload })
+
+export const getBroadcastNotifications = (activeOnly?: boolean) =>
+  invoke<BroadcastNotification[]>('get_broadcast_notifications', { activeOnly })
+
+export const deleteBroadcastNotification = (id: string) =>
+  invoke<void>('delete_broadcast_notification', { id })
 
 // ── Damaged Goods ──
 export interface DamagedGoodItem {

@@ -141,6 +141,9 @@ pub fn run() {
             notifications::get_system_notifications,
             notifications::mark_notification_as_read,
             notifications::mark_all_notifications_as_read,
+            notifications::create_broadcast_notification,
+            notifications::get_broadcast_notifications,
+            notifications::delete_broadcast_notification,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

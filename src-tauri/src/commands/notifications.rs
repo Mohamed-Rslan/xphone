@@ -79,6 +79,156 @@ pub async fn get_system_notifications(
     Ok(list)
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct BroadcastNotification {
+    pub id: String,
+    pub sender_user_id: Option<String>,
+    pub sender_name: String,
+    pub target_role: String,
+    pub title: String,
+    pub message: String,
+    pub severity: String,
+    pub start_time: Option<String>,
+    pub end_time: Option<String>,
+    pub script_payload: Option<String>,
+    pub is_active: bool,
+    pub created_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateBroadcastNotificationPayload {
+    pub sender_user_id: Option<String>,
+    pub sender_name: String,
+    pub target_role: Option<String>,
+    pub title: String,
+    pub message: String,
+    pub severity: Option<String>,
+    pub start_time: Option<String>,
+    pub end_time: Option<String>,
+    pub script_payload: Option<String>,
+}
+
+#[tauri::command]
+pub async fn create_broadcast_notification(
+    state: State<'_, AppState>,
+    payload: CreateBroadcastNotificationPayload,
+) -> Result<BroadcastNotification, AppError> {
+    let conn = state.pool.get()?;
+    let id = Uuid::new_v4().to_string();
+    let now = Utc::now().to_rfc3339();
+    let target_role = payload.target_role.unwrap_or_else(|| "all".to_string());
+    let severity = payload.severity.unwrap_or_else(|| "medium".to_string());
+
+    conn.execute(
+        "INSERT INTO broadcast_notifications (
+            id, sender_user_id, sender_name, target_role, title, message, severity, start_time, end_time, script_payload, is_active, created_at
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 1, ?11)",
+        rusqlite::params![
+            id,
+            payload.sender_user_id,
+            payload.sender_name,
+            target_role,
+            payload.title,
+            payload.message,
+            severity,
+            payload.start_time,
+            payload.end_time,
+            payload.script_payload,
+            now
+        ],
+    )?;
+
+    // Also broadcast to system_notifications for all users to see in real-time history!
+    let sys_details = format!(
+        "{}\n[إطار زمني: من {} إلى {}]\n{}",
+        payload.message,
+        payload.start_time.as_deref().unwrap_or("فوري"),
+        payload.end_time.as_deref().unwrap_or("دائم"),
+        payload.script_payload.as_ref().map(|s| format!("[تعليمات/إسكريبت: {}]", s)).unwrap_or_default()
+    );
+
+    log_system_notification(
+        &conn,
+        payload.sender_user_id.as_deref(),
+        &payload.sender_name,
+        "custom_broadcast",
+        &format!("📢 تنبيه رئيسي: {}", payload.title),
+        Some(&sys_details),
+    )?;
+
+    Ok(BroadcastNotification {
+        id,
+        sender_user_id: payload.sender_user_id,
+        sender_name: payload.sender_name,
+        target_role,
+        title: payload.title,
+        message: payload.message,
+        severity,
+        start_time: payload.start_time,
+        end_time: payload.end_time,
+        script_payload: payload.script_payload,
+        is_active: true,
+        created_at: now,
+    })
+}
+
+#[tauri::command]
+pub async fn get_broadcast_notifications(
+    state: State<'_, AppState>,
+    active_only: Option<bool>,
+) -> Result<Vec<BroadcastNotification>, AppError> {
+    let conn = state.pool.get()?;
+    let where_clause = if active_only.unwrap_or(true) {
+        "WHERE is_active = 1"
+    } else {
+        ""
+    };
+
+    let sql = format!(
+        "SELECT id, sender_user_id, sender_name, target_role, title, message, severity, start_time, end_time, script_payload, is_active, created_at
+         FROM broadcast_notifications
+         {}
+         ORDER BY created_at DESC",
+        where_clause
+    );
+
+    let mut stmt = conn.prepare(&sql)?;
+    let list = stmt
+        .query_map([], |r| {
+            let active_int: i64 = r.get(10)?;
+            Ok(BroadcastNotification {
+                id: r.get(0)?,
+                sender_user_id: r.get(1)?,
+                sender_name: r.get(2)?,
+                target_role: r.get(3)?,
+                title: r.get(4)?,
+                message: r.get(5)?,
+                severity: r.get(6)?,
+                start_time: r.get(7)?,
+                end_time: r.get(8)?,
+                script_payload: r.get(9)?,
+                is_active: active_int == 1,
+                created_at: r.get(11)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(list)
+}
+
+#[tauri::command]
+pub async fn delete_broadcast_notification(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<(), AppError> {
+    let conn = state.pool.get()?;
+    conn.execute(
+        "UPDATE broadcast_notifications SET is_active = 0 WHERE id = ?1",
+        rusqlite::params![id],
+    )?;
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn mark_notification_as_read(
     state: State<'_, AppState>,

@@ -8,7 +8,11 @@ import {
   getAccountAlerts,
   getSystemNotifications,
   markAllNotificationsAsRead,
+  createBroadcastNotification,
+  getBroadcastNotifications,
+  deleteBroadcastNotification,
   SystemNotification,
+  BroadcastNotification,
 } from '../lib/commands'
 import { exportNotificationsExcel } from '../lib/excel'
 import toast from 'react-hot-toast'
@@ -29,22 +33,26 @@ export default function TopBar({ scale, setScale, onMenuToggle }: TopBarProps) {
   const [showAlertModal, setShowAlertModal] = useState(false)
   const [showThemeMenu, setShowThemeMenu] = useState(false)
   const [notifications, setNotifications] = useState<SystemNotification[]>([])
+  const [broadcastNotifs, setBroadcastNotifs] = useState<BroadcastNotification[]>([])
   const [showNotifsModal, setShowNotifsModal] = useState(false)
+  const [showCreateBroadcastModal, setShowCreateBroadcastModal] = useState(false)
   const [selectedNotifDetails, setSelectedNotifDetails] = useState<SystemNotification | null>(null)
   const [notifSearch, setNotifSearch] = useState('')
   const [notifFilter, setNotifFilter] = useState<'all' | 'unread' | 'high' | 'medium'>('all')
   const themeMenuRef = useRef<HTMLDivElement>(null)
-  const notifsMenuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     loadSettings().catch(console.error)
   }, [])
 
   const fetchNotifications = async () => {
-    if (user?.role !== 'admin') return
     try {
-      const list = await getSystemNotifications(40, false)
+      const [list, broadcasts] = await Promise.all([
+        getSystemNotifications(50, false),
+        getBroadcastNotifications(true),
+      ])
       setNotifications(list || [])
+      setBroadcastNotifs(broadcasts || [])
     } catch (e) {
       console.error(e)
     }
@@ -311,8 +319,8 @@ export default function TopBar({ scale, setScale, onMenuToggle }: TopBarProps) {
           )}
         </div>
 
-        {/* System Activity Notifications Bell (For Super Admin) */}
-        {user?.role === 'admin' && (
+        {/* System Activity Notifications Bell (For ALL Users) */}
+        {user && (
           <div>
             <button
               type="button"
@@ -424,6 +432,18 @@ export default function TopBar({ scale, setScale, onMenuToggle }: TopBarProps) {
               </div>
 
               <div className="flex items-center gap-2 flex-wrap">
+                {user?.role === 'admin' && (
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateBroadcastModal(true)}
+                    className="btn-primary text-xs font-bold py-1.5 px-3 flex items-center gap-1.5 shadow-md cursor-pointer"
+                    title="إضافة وبث تنبيه جديد مخصص لكافة المستخدمين مع إطار زمني وأسكريبت"
+                  >
+                    <Sparkles size={15} />
+                    📢 بث تنبيه جديد للمستخدمين
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={async () => {
@@ -632,6 +652,176 @@ export default function TopBar({ scale, setScale, onMenuToggle }: TopBarProps) {
           </div>
         </div>
       )}
+
+      {/* Create Broadcast Notification Modal (نافذة إضافة وبث تنبيه مخصص للمستخدمين مع إطار زمني وأسكريبت) */}
+      {showCreateBroadcastModal && (
+        <CreateBroadcastModal
+          onClose={() => setShowCreateBroadcastModal(false)}
+          onCreated={() => {
+            fetchNotifications()
+          }}
+        />
+      )}
     </header>
+  )
+}
+
+function CreateBroadcastModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const { user } = useAuthStore()
+  const [title, setTitle] = useState('')
+  const [message, setMessage] = useState('')
+  const [severity, setSeverity] = useState<'low' | 'medium' | 'high'>('medium')
+  const [targetRole, setTargetRole] = useState<'all' | 'staff'>('all')
+  const [startTime, setStartTime] = useState('')
+  const [endTime, setEndTime] = useState('')
+  const [scriptPayload, setScriptPayload] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!title.trim() || !message.trim()) {
+      toast.error('يرجى كتابة عنوان التنبيه ونص الرسالة')
+      return
+    }
+
+    setSaving(true)
+    try {
+      await createBroadcastNotification({
+        sender_user_id: user?.id,
+        sender_name: user?.display_name || 'المستخدم الرئيسي',
+        target_role: targetRole,
+        title: title.trim(),
+        message: message.trim(),
+        severity,
+        start_time: startTime || null,
+        end_time: endTime || null,
+        script_payload: scriptPayload.trim() || null,
+      })
+      toast.success('تم إضافة وبث التنبيه لكافة المستخدمين بنجاح!')
+      onCreated()
+      onClose()
+    } catch (err: any) {
+      console.error(err)
+      toast.error('فشل إرسال التنبيه: ' + err.toString())
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-content p-6 max-w-lg w-full flex flex-col gap-4 animate-scale-up">
+        <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: 'var(--clr-border)' }}>
+          <div className="flex items-center gap-2 text-amber-400 font-bold text-base">
+            <Sparkles size={20} />
+            <span>📢 إضافة وبث تنبيه جديد لكافة المستخدمين</span>
+          </div>
+          <button type="button" className="btn-icon p-1 text-[var(--clr-muted)] hover:text-white" onClick={onClose}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <div>
+            <label className="label text-xs font-bold mb-1">عنوان التنبيه *</label>
+            <input
+              type="text"
+              className="input w-full text-xs font-bold"
+              placeholder="مثال: تنبيه هام بشأن تعليمات الجرد الدوري أو المواعيد"
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              required
+            />
+          </div>
+
+          <div>
+            <label className="label text-xs font-bold mb-1">رسالة التنبيه والتفاصيل *</label>
+            <textarea
+              className="input w-full text-xs min-h-[90px] leading-relaxed"
+              placeholder="اكتب نص الرسالة والتوجيهات التي تظهر لكافة الموظفين والمستخدمين..."
+              value={message}
+              onChange={e => setMessage(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label text-xs font-bold mb-1">مستوى الخطورة والأولوية</label>
+              <select
+                className="input w-full text-xs font-bold"
+                value={severity}
+                onChange={e => setSeverity(e.target.value as any)}
+              >
+                <option value="low">🟢 عادي (إشعار خفيف)</option>
+                <option value="medium">🟡 متوسط (تحذير هام)</option>
+                <option value="high">🔴 مشدد (أولوية قصوى واهتمام عالي)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="label text-xs font-bold mb-1">المستخدمون المستهدفون</label>
+              <select
+                className="input w-full text-xs font-bold"
+                value={targetRole}
+                onChange={e => setTargetRole(e.target.value as any)}
+              >
+                <option value="all">📢 كافة المستخدمين والموظفين</option>
+                <option value="staff">👤 الموظفون وطاقم العمل فقط</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="p-3 rounded-xl border bg-black/20 flex flex-col gap-3" style={{ borderColor: 'var(--clr-border)' }}>
+            <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+              <span>📅 الإطار الزمني لتفعيل التنبيه (اختياري)</span>
+            </span>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label text-[11px] font-bold mb-1">تاريخ ووقت البداية</label>
+                <input
+                  type="datetime-local"
+                  className="input w-full text-xs font-mono"
+                  value={startTime}
+                  onChange={e => setStartTime(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="label text-[11px] font-bold mb-1">تاريخ ووقت انتهاء الصلاحية</label>
+                <input
+                  type="datetime-local"
+                  className="input w-full text-xs font-mono"
+                  value={endTime}
+                  onChange={e => setEndTime(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="label text-xs font-bold mb-1 flex items-center gap-1.5 text-blue-300">
+              <span>💻 نص الأسكريبت أو التعليمات الإدارية البرمجية (اختياري)</span>
+            </label>
+            <input
+              type="text"
+              className="input w-full text-xs font-mono text-left dir-ltr"
+              dir="ltr"
+              placeholder="مثال: auto_audit_check, custom_action_code, payment_due_script..."
+              value={scriptPayload}
+              onChange={e => setScriptPayload(e.target.value)}
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-3 border-t" style={{ borderColor: 'var(--clr-border)' }}>
+            <button type="button" className="btn-secondary text-xs font-bold" onClick={onClose}>
+              إلغاء
+            </button>
+            <button type="submit" disabled={saving} className="btn-primary text-xs font-bold px-6 shadow-lg">
+              {saving ? 'جاري البث...' : '🚀 إرسال وبث التنبيه الآن'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   )
 }
