@@ -357,8 +357,14 @@ export interface BroadcastNotification {
   created_at: string
 }
 
-export const getSystemNotifications = (limit?: number, unreadOnly?: boolean) =>
-  invoke<SystemNotification[]>('get_system_notifications', { limit, unreadOnly })
+export const getSystemNotifications = (limit?: number, unreadOnly?: boolean, includeAllHistory?: boolean) =>
+  invoke<SystemNotification[]>('get_system_notifications', {
+    limit,
+    unreadOnly,
+    unread_only: unreadOnly,
+    includeAllHistory,
+    include_all_history: includeAllHistory,
+  })
 
 export const markNotificationAsRead = (id: string) =>
   invoke<void>('mark_notification_as_read', { id })

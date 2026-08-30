@@ -447,16 +447,17 @@ export default function TopBar({ scale, setScale, onMenuToggle }: TopBarProps) {
                 <button
                   type="button"
                   onClick={async () => {
-                    const t = toast.loading('جاري تصدير سجل التنبيهات لـ Excel...')
+                    const t = toast.loading('جاري جلب السجل الكامل وتصدير الإكسيل...')
                     try {
-                      await exportNotificationsExcel(notifications)
-                      toast.success('تم تصدير سجل التنبيهات لـ Excel بنجاح!', { id: t })
+                      const fullHistory = await getSystemNotifications(2000, false, true)
+                      await exportNotificationsExcel(fullHistory || notifications)
+                      toast.success('تم تصدير سجل التنبيهات الكامل لـ Excel بنجاح!', { id: t })
                     } catch (e: any) {
                       toast.error('فشل التصدير: ' + e.toString(), { id: t })
                     }
                   }}
                   className="btn-secondary text-xs font-bold py-1.5 px-3 flex items-center gap-1.5 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/10"
-                  title="تصدير جميع التنبيهات والإشعارات المسجلة لملف Excel"
+                  title="تصدير سجل جميع التنبيهات والإشعارات المسجلة بالكامل لملف Excel"
                 >
                   <FileSpreadsheet size={15} />
                   تصدير سجل التنبيهات Excel

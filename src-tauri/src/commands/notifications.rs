@@ -41,13 +41,19 @@ pub async fn get_system_notifications(
     state: State<'_, AppState>,
     limit: Option<i64>,
     unread_only: Option<bool>,
+    include_all_history: Option<bool>,
 ) -> Result<Vec<SystemNotification>, AppError> {
     let conn = state.pool.get()?;
-    let lim = limit.unwrap_or(50);
+    let lim = limit.unwrap_or(100);
+    let include_all = include_all_history.unwrap_or(false);
+
     let where_clause = if unread_only.unwrap_or(false) {
-        "WHERE is_read = 0"
+        "WHERE is_read = 0".to_string()
+    } else if !include_all {
+        // Read notifications older than 10 days automatically vanish from daily Bell view!
+        "WHERE is_read = 0 OR datetime(created_at) >= datetime('now', '-10 days')".to_string()
     } else {
-        ""
+        "".to_string()
     };
 
     let sql = format!(
