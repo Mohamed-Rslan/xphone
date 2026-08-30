@@ -1865,3 +1865,74 @@ export async function exportSuppliersExcel(suppliers: any[], purchaseOrders: any
   const filename = `Suppliers_Report_${today()}.xlsx`
   return await saveExcelWithDialog(workbook, filename)
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 13. NOTIFICATIONS HISTORY EXPORT (تصدير سجل التنبيهات وإشعارات العمليات)
+// ─────────────────────────────────────────────────────────────────────────────
+export async function exportNotificationsExcel(notifications: any[]): Promise<boolean> {
+  const storeName = useSettingsStore.getState().storeName || 'XPhone'
+  const workbook = XLSX.utils.book_new()
+
+  const headers = [
+    'م',
+    'عنوان التنبيه / الإشعار',
+    'التفاصيل والبيان',
+    'نوع العملية',
+    'القائم بالعملية / المستخدم',
+    'حالة القراءة',
+    'التاريخ والوقت'
+  ]
+
+  const rows: any[][] = notifications.map((n, idx) => {
+    let actionLabel = 'تنبيه نظام / حدود سحب'
+    if (n.action_type === 'sales_return') actionLabel = 'مرتجع مبيعات'
+    else if (n.action_type === 'purchases_create') actionLabel = 'فاتورة شراء جديدة'
+    else if (n.action_type === 'inventory_damaged') actionLabel = 'بضاعة هالكة / تالف'
+    else if (n.action_type === 'equity_edit') actionLabel = 'تعديل رأس مال / شريك'
+
+    return [
+      idx + 1,
+      n.title || 'تنبيه نظام',
+      n.message || '—',
+      actionLabel,
+      n.actor_name || 'نظام التنبيهات',
+      n.is_read ? 'مقروء' : 'جديد / غير مقروء',
+      n.created_at ? formatDateTime(n.created_at) : '—'
+    ]
+  })
+
+  rows.push([
+    { v: 'الإجمالي الكلي', t: 's', s: styles.totalRow },
+    { v: `${notifications.length} إشعار مسجل`, t: 's', s: styles.totalRow },
+    { v: '-', t: 's', s: styles.totalRow },
+    { v: '-', t: 's', s: styles.totalRow },
+    { v: '-', t: 's', s: styles.totalRow },
+    { v: '-', t: 's', s: styles.totalRow },
+    { v: '-', t: 's', s: styles.totalRow },
+  ])
+
+  const colWidths = [
+    { wch: 6 },
+    { wch: 35 },
+    { wch: 50 },
+    { wch: 25 },
+    { wch: 22 },
+    { wch: 18 },
+    { wch: 22 },
+  ]
+
+  const sheet = buildFormattedSheet(
+    `سجل التنبيهات وإشعارات العمليات الحساسة — ${storeName}`,
+    today(),
+    today(),
+    headers,
+    rows,
+    colWidths,
+    `إجمالي الإشعارات المسجلة: ${notifications.length}`
+  )
+
+  XLSX.utils.book_append_sheet(workbook, sheet, 'سجل التنبيهات')
+
+  const filename = `Notifications_History_${today()}.xlsx`
+  return await saveExcelWithDialog(workbook, filename)
+}

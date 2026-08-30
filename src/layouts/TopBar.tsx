@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Menu, LogOut, User, Bell, AlertTriangle, Palette, Check, Sparkles, Sun, Moon } from 'lucide-react'
+import { Menu, LogOut, User, Bell, AlertTriangle, Palette, Check, Sparkles, Sun, Moon, FileSpreadsheet, Eye, Search, Filter, CheckCheck, X } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 import { useThemeStore, THEMES } from '../store/themeStore'
 import { useSettingsStore } from '../store/settingsStore'
@@ -10,8 +10,9 @@ import {
   markAllNotificationsAsRead,
   SystemNotification,
 } from '../lib/commands'
+import { exportNotificationsExcel } from '../lib/excel'
 import toast from 'react-hot-toast'
-import { formatDate, formatTime, formatEGP } from '../lib/utils'
+import { formatDate, formatTime, formatDateTime, formatEGP } from '../lib/utils'
 
 interface TopBarProps {
   scale: number
@@ -28,7 +29,10 @@ export default function TopBar({ scale, setScale, onMenuToggle }: TopBarProps) {
   const [showAlertModal, setShowAlertModal] = useState(false)
   const [showThemeMenu, setShowThemeMenu] = useState(false)
   const [notifications, setNotifications] = useState<SystemNotification[]>([])
-  const [showNotifsMenu, setShowNotifsMenu] = useState(false)
+  const [showNotifsModal, setShowNotifsModal] = useState(false)
+  const [selectedNotifDetails, setSelectedNotifDetails] = useState<SystemNotification | null>(null)
+  const [notifSearch, setNotifSearch] = useState('')
+  const [notifFilter, setNotifFilter] = useState<'all' | 'unread' | 'high' | 'medium'>('all')
   const themeMenuRef = useRef<HTMLDivElement>(null)
   const notifsMenuRef = useRef<HTMLDivElement>(null)
 
@@ -312,17 +316,17 @@ export default function TopBar({ scale, setScale, onMenuToggle }: TopBarProps) {
 
         {/* System Activity Notifications Bell (For Super Admin) */}
         {user?.role === 'admin' && (
-          <div className="relative" ref={notifsMenuRef}>
+          <div>
             <button
               type="button"
-              onClick={() => setShowNotifsMenu(!showNotifsMenu)}
+              onClick={() => setShowNotifsModal(true)}
               className="btn-icon p-2 rounded-xl cursor-pointer hover:scale-105 transition-transform relative flex items-center justify-center"
               style={{
                 background: 'var(--clr-surface-2)',
                 borderColor: 'var(--clr-border)',
                 color: unreadNotifsCount > 0 ? '#f59e0b' : 'var(--clr-text)',
               }}
-              title="إشعارات العمليات الحساسة"
+              title="إشعارات وسجل التنبيهات والعمليات"
             >
               <Bell size={17} />
               {unreadNotifsCount > 0 && (
@@ -331,95 +335,6 @@ export default function TopBar({ scale, setScale, onMenuToggle }: TopBarProps) {
                 </span>
               )}
             </button>
-
-            {showNotifsMenu && (
-              <div
-                className="absolute left-0 mt-2 w-[350px] sm:w-[440px] md:w-[500px] glass-card p-3.5 rounded-2xl shadow-2xl z-50 border animate-slide-up"
-                style={{
-                  borderColor: 'var(--clr-border-2)',
-                  background: 'var(--glass-bg)',
-                  backdropFilter: 'blur(30px)',
-                }}
-              >
-                <div className="flex items-center justify-between pb-2 border-b mb-2" style={{ borderColor: 'var(--clr-border)' }}>
-                  <div className="flex items-center gap-1.5 font-bold text-xs text-[var(--clr-text)]">
-                    <Bell size={15} className="text-amber-400" />
-                    <span>إشعارات العمليات الحساسة والحدود المالية</span>
-                    {unreadNotifsCount > 0 && (
-                      <span className="badge badge-warning text-[10px] font-mono py-0 px-1.5">{unreadNotifsCount} جديد</span>
-                    )}
-                  </div>
-                  {unreadNotifsCount > 0 && (
-                    <button
-                      type="button"
-                      onClick={handleMarkAllNotifsRead}
-                      className="text-[11px] text-[var(--clr-primary)] hover:underline font-bold cursor-pointer"
-                    >
-                      تحديد الكل كمقروء
-                    </button>
-                  )}
-                </div>
-
-                <div className="flex flex-col gap-2.5 max-h-[420px] overflow-y-auto p-1">
-                  {notifications.map((notif) => {
-                    let Icon = Bell
-                    let iconColor = 'text-amber-400 bg-amber-500/10 border-amber-500/20'
-                    if (notif.action_type === 'sales_return') {
-                      Icon = Sparkles
-                      iconColor = 'text-red-400 bg-red-500/10 border-red-500/20'
-                    } else if (notif.action_type === 'purchases_create') {
-                      Icon = Bell
-                      iconColor = 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
-                    } else if (notif.action_type === 'inventory_damaged' || notif.action_type?.includes('debit_limit')) {
-                      Icon = AlertTriangle
-                      iconColor = 'text-red-400 bg-red-500/10 border-red-500/20'
-                    } else if (notif.action_type === 'equity_edit') {
-                      Icon = User
-                      iconColor = 'text-purple-400 bg-purple-500/10 border-purple-500/20'
-                    }
-
-                    return (
-                      <div
-                        key={notif.id}
-                        className={`p-3 rounded-xl border transition-all flex items-start gap-3 ${
-                          !notif.is_read
-                            ? 'bg-[var(--clr-surface-2)] border-amber-500/40 shadow-sm'
-                            : 'bg-[var(--clr-surface-3)] border-[var(--clr-border)] opacity-85'
-                        }`}
-                      >
-                        <div className={`w-8 h-8 rounded-xl border flex items-center justify-center shrink-0 mt-0.5 ${iconColor}`}>
-                          <Icon size={16} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between gap-2 mb-1">
-                            <span className="font-bold text-xs text-[var(--clr-text)] leading-snug break-words flex-1">
-                              {notif.title}
-                            </span>
-                            <span className="text-[10px] text-[var(--clr-muted)] whitespace-nowrap shrink-0 font-mono">
-                              {formatTime(notif.created_at)}
-                            </span>
-                          </div>
-                          {notif.details && (
-                            <p className="text-[11px] text-[var(--clr-text-2)] leading-relaxed break-words bg-black/20 p-2 rounded-lg border border-white/5 my-1">
-                              {notif.details}
-                            </p>
-                          )}
-                          <div className="text-[10px] text-[var(--clr-primary)] font-bold mt-1">
-                            القائم بالعملية: {notif.user_name}
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })}
-
-                  {notifications.length === 0 && (
-                    <div className="text-center py-8 text-xs text-[var(--clr-muted)]">
-                      لا توجد إشعارات أو عمليات حساسة حالياً
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
           </div>
         )}
 
@@ -483,6 +398,239 @@ export default function TopBar({ scale, setScale, onMenuToggle }: TopBarProps) {
 
             <div className="flex justify-end pt-2 border-t" style={{ borderColor: 'var(--clr-border)' }}>
               <button className="btn-secondary" onClick={() => setShowAlertModal(false)}>إغلاق</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Centered Sub-Window Modal for Notifications (نافذة فرعية مركزية للإشعارات) */}
+      {showNotifsModal && (
+        <div className="modal-overlay">
+          <div className="modal-content p-6 max-w-3xl w-full max-h-[85vh] flex flex-col gap-4">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b pb-3 flex-wrap gap-3" style={{ borderColor: 'var(--clr-border)' }}>
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center border border-amber-500/20">
+                  <Bell size={20} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg text-[var(--clr-text)] flex items-center gap-2">
+                    <span>مركز التنبيهات وإشعارات النظام الحساسة</span>
+                    {unreadNotifsCount > 0 && (
+                      <span className="badge badge-warning text-xs font-mono">{unreadNotifsCount} جديد</span>
+                    )}
+                  </h3>
+                  <p className="text-xs text-[var(--clr-muted)] mt-0.5">
+                    سجل كامل لكافة التنبيهات، حدود الحسابات، ومرتجعات ومشتريات ومسحوبات النظام
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const t = toast.loading('جاري تصدير سجل التنبيهات لـ Excel...')
+                    try {
+                      await exportNotificationsExcel(notifications)
+                      toast.success('تم تصدير سجل التنبيهات لـ Excel بنجاح!', { id: t })
+                    } catch (e: any) {
+                      toast.error('فشل التصدير: ' + e.toString(), { id: t })
+                    }
+                  }}
+                  className="btn-secondary text-xs font-bold py-1.5 px-3 flex items-center gap-1.5 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/10"
+                  title="تصدير جميع التنبيهات والإشعارات المسجلة لملف Excel"
+                >
+                  <FileSpreadsheet size={15} />
+                  تصدير سجل التنبيهات Excel
+                </button>
+
+                {unreadNotifsCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleMarkAllNotifsRead}
+                    className="btn-secondary text-xs font-bold py-1.5 px-3 flex items-center gap-1.5 text-blue-400 border-blue-500/40 hover:bg-blue-500/10"
+                  >
+                    <CheckCheck size={15} />
+                    تحديد الكل كمقروء
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setShowNotifsModal(false)}
+                  className="btn-icon p-1.5 text-[var(--clr-muted)] hover:text-white"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* Filter & Search Bar */}
+            <div className="flex items-center justify-between gap-3 flex-wrap bg-black/20 p-2.5 rounded-xl border" style={{ borderColor: 'var(--clr-border)' }}>
+              <div className="relative flex-1 min-w-[200px]">
+                <Search size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--clr-muted)]" />
+                <input
+                  type="text"
+                  className="input w-full pr-9 py-1.5 text-xs"
+                  placeholder="بحث في سجل التنبيهات بالإسم أو البيان..."
+                  value={notifSearch}
+                  onChange={e => setNotifSearch(e.target.value)}
+                />
+              </div>
+
+              <div className="flex items-center gap-1 text-xs">
+                <button
+                  type="button"
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all ${notifFilter === 'all' ? 'bg-amber-500 text-white' : 'bg-white/5 text-[var(--clr-muted)] hover:text-white'}`}
+                  onClick={() => setNotifFilter('all')}
+                >
+                  الكل ({notifications.length})
+                </button>
+                <button
+                  type="button"
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all ${notifFilter === 'unread' ? 'bg-amber-500 text-white' : 'bg-white/5 text-[var(--clr-muted)] hover:text-white'}`}
+                  onClick={() => setNotifFilter('unread')}
+                >
+                  غير مقروء ({unreadNotifsCount})
+                </button>
+                <button
+                  type="button"
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all ${notifFilter === 'high' ? 'bg-red-500 text-white' : 'bg-white/5 text-[var(--clr-muted)] hover:text-white'}`}
+                  onClick={() => setNotifFilter('high')}
+                >
+                  🔴 مشدد / خطورة عالية
+                </button>
+              </div>
+            </div>
+
+            {/* Notifications List */}
+            <div className="flex-1 overflow-y-auto flex flex-col gap-2.5 pr-1 max-h-[52vh]">
+              {notifications
+                .filter(n => {
+                  if (notifFilter === 'unread' && n.is_read) return false
+                  if (notifFilter === 'high' && !n.action_type?.includes('limit') && !n.action_type?.includes('damaged')) return false
+                  if (notifSearch.trim()) {
+                    const q = notifSearch.toLowerCase()
+                    return n.title?.toLowerCase().includes(q) || n.details?.toLowerCase().includes(q) || n.user_name?.toLowerCase().includes(q)
+                  }
+                  return true
+                })
+                .map((notif) => {
+                  let Icon = Bell
+                  let iconColor = 'text-amber-400 bg-amber-500/10 border-amber-500/20'
+                  if (notif.action_type === 'sales_return') {
+                    Icon = Sparkles
+                    iconColor = 'text-red-400 bg-red-500/10 border-red-500/20'
+                  } else if (notif.action_type === 'purchases_create') {
+                    Icon = Bell
+                    iconColor = 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+                  } else if (notif.action_type === 'inventory_damaged' || notif.action_type?.includes('debit_limit')) {
+                    Icon = AlertTriangle
+                    iconColor = 'text-red-400 bg-red-500/10 border-red-500/20'
+                  } else if (notif.action_type === 'equity_edit') {
+                    Icon = User
+                    iconColor = 'text-purple-400 bg-purple-500/10 border-purple-500/20'
+                  }
+
+                  return (
+                    <div
+                      key={notif.id}
+                      onClick={() => setSelectedNotifDetails(notif)}
+                      className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-start gap-3.5 hover:scale-[1.005] ${
+                        !notif.is_read
+                          ? 'bg-[var(--clr-surface-2)] border-amber-500/50 shadow-md ring-1 ring-amber-500/20'
+                          : 'bg-[var(--clr-surface-3)] border-[var(--clr-border)] opacity-85 hover:opacity-100'
+                      }`}
+                    >
+                      <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 mt-0.5 ${iconColor}`}>
+                        <Icon size={18} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2 mb-1">
+                          <span className="font-bold text-sm text-[var(--clr-text)] leading-snug break-words">
+                            {notif.title}
+                          </span>
+                          <span className="text-xs text-[var(--clr-muted)] whitespace-nowrap shrink-0 font-mono">
+                            {formatDateTime(notif.created_at)}
+                          </span>
+                        </div>
+                        {notif.details && (
+                          <p className="text-xs text-[var(--clr-text-2)] leading-relaxed break-words bg-black/20 p-2.5 rounded-xl border border-white/5 my-1.5">
+                            {notif.details}
+                          </p>
+                        )}
+                        <div className="flex items-center justify-between text-xs mt-1 font-semibold">
+                          <span className="text-[var(--clr-primary)]">القائم بالعملية: {notif.user_name}</span>
+                          <span className="text-amber-400 hover:underline flex items-center gap-1">
+                            <Eye size={13} /> اضغط لفتح التفاصيل الكاملة
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+
+              {notifications.length === 0 && (
+                <div className="text-center py-12 text-xs text-[var(--clr-muted)] font-bold">
+                  لا توجد إشعارات مسجلة بالنظام حتى الآن
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end pt-3 border-t" style={{ borderColor: 'var(--clr-border)' }}>
+              <button type="button" className="btn-secondary text-xs font-bold" onClick={() => setShowNotifsModal(false)}>
+                إغلاق النافذة
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Notification Details Item Sub-Modal (نافذة تفاصيل التنبيه المختار) */}
+      {selectedNotifDetails && (
+        <div className="modal-overlay">
+          <div className="modal-content p-6 max-w-lg w-full flex flex-col gap-4 animate-scale-up">
+            <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: 'var(--clr-border)' }}>
+              <div className="flex items-center gap-2 text-amber-400 font-bold text-base">
+                <Bell size={20} />
+                <span>تفاصيل التنبيه الإشعاري</span>
+              </div>
+              <button type="button" className="btn-icon p-1 text-[var(--clr-muted)] hover:text-white" onClick={() => setSelectedNotifDetails(null)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-4 rounded-xl border bg-black/30 flex flex-col gap-3" style={{ borderColor: 'var(--clr-border)' }}>
+              <h4 className="font-bold text-base text-[var(--clr-text)] border-b pb-2" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+                {selectedNotifDetails.title}
+              </h4>
+
+              {selectedNotifDetails.details && (
+                <div>
+                  <span className="text-xs text-[var(--clr-muted)] block font-bold mb-1">بيان التفاصيل الكاملة:</span>
+                  <p className="text-xs leading-relaxed text-[var(--clr-text-2)] bg-black/40 p-3 rounded-xl border border-white/5 font-mono">
+                    {selectedNotifDetails.details}
+                  </p>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3 text-xs pt-2">
+                <div>
+                  <span className="text-[var(--clr-muted)] block font-bold">القائم بالعملية:</span>
+                  <span className="font-bold text-[var(--clr-primary)]">{selectedNotifDetails.user_name}</span>
+                </div>
+                <div>
+                  <span className="text-[var(--clr-muted)] block font-bold">التاريخ والوقت:</span>
+                  <span className="font-mono">{formatDateTime(selectedNotifDetails.created_at)}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t" style={{ borderColor: 'var(--clr-border)' }}>
+              <button type="button" className="btn-secondary text-xs font-bold" onClick={() => setSelectedNotifDetails(null)}>
+                إغلاق
+              </button>
             </div>
           </div>
         </div>
