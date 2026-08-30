@@ -1455,8 +1455,7 @@ export async function exportShareholderLedgerExcel(
   XLSX.utils.book_append_sheet(workbook, sheet, 'كشف أستاذ الشركاء')
 
   const filename = `Shareholder_Ledger_${shareholderName ? shareholderName.replace(/\s+/g, '_') : 'All'}_${dateFrom}_to_${dateTo}.xlsx`
-  XLSX.writeFile(workbook, filename)
-  return true
+  return await saveExcelWithDialog(workbook, filename)
 }
 
 export async function exportExpensesExcel(
@@ -1524,6 +1523,5 @@ export async function exportExpensesExcel(
   XLSX.utils.book_append_sheet(workbook, sheet, 'تقرير المصروفات')
 
   const filename = `Expenses_Report_${dateFrom}_to_${dateTo}.xlsx`
-  XLSX.writeFile(workbook, filename)
-  return true
+  return await saveExcelWithDialog(workbook, filename)
 }

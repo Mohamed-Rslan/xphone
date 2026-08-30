@@ -378,10 +378,6 @@ export default function ExpensesPage() {
             <FileSpreadsheet size={16} />
             تصدير لـ Excel
           </button>
-          <button className="btn-secondary flex items-center gap-2 font-bold text-xs cursor-pointer" onClick={handlePrintReport}>
-            <Printer size={16} />
-            طباعة تقرير المصروفات
-          </button>
           <button className="btn-primary flex items-center gap-2 font-bold text-xs cursor-pointer" onClick={openAddModal}>
             <Plus size={18} />
             تسجيل مصروف جديد
