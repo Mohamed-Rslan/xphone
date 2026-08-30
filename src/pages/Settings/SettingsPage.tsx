@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { getSettings, getUsers, createUser } from '../../lib/commands'
-import { Plus, Palette, Check, Sparkles, User, Store, Upload, Image as ImageIcon, Trash2, Camera, ShieldCheck, Type, ZoomIn } from 'lucide-react'
+import { getSettings, getUsers, createUser, getNotificationRules, updateNotificationRule, NotificationRule } from '../../lib/commands'
+import { Plus, Palette, Check, Sparkles, User, Store, Upload, Image as ImageIcon, Trash2, Camera, ShieldCheck, Type, ZoomIn, BellRing, ShieldAlert, AlertTriangle, Clock, Sliders } from 'lucide-react'
 import { useThemeStore, THEMES } from '../../store/themeStore'
 import { useSettingsStore } from '../../store/settingsStore'
 import toast from 'react-hot-toast'
@@ -15,7 +15,8 @@ interface SettingsPageProps {
 export default function SettingsPage({ scale = 0.9, setScale }: SettingsPageProps) {
   const [settings, setSettings] = useState<Record<string, string>>({})
   const [users, setUsers] = useState<any[]>([])
-  const [tab, setTab] = useState<'general' | 'users' | 'themes'>('general')
+  const [notificationRules, setNotificationRules] = useState<NotificationRule[]>([])
+  const [tab, setTab] = useState<'general' | 'users' | 'themes' | 'notifications'>('general')
   const [showUserModal, setShowUserModal] = useState(false)
   const [editingUser, setEditingUser] = useState<any>(null)
   const [saving, setSaving] = useState(false)
@@ -25,11 +26,12 @@ export default function SettingsPage({ scale = 0.9, setScale }: SettingsPageProp
   const { storeLogo, storeName, saveStoreSettings, loadSettings } = useSettingsStore()
 
   const load = async () => {
-    const [s, u] = await Promise.all([getSettings(), getUsers()])
+    const [s, u, rules] = await Promise.all([getSettings(), getUsers(), getNotificationRules()])
     const map: Record<string, string> = {}
     s.forEach((item: any) => { map[item.key] = item.value })
     setSettings(map)
     setUsers(u)
+    setNotificationRules(rules || [])
   }
 
   useEffect(() => { load().catch(console.error) }, [])
@@ -122,6 +124,16 @@ export default function SettingsPage({ scale = 0.9, setScale }: SettingsPageProp
         >
           <Palette size={15} />
           المظهر والثيمات الألوان ({THEMES.length})
+        </button>
+
+        <button
+          className={`badge cursor-pointer px-4 py-2.5 text-sm font-bold flex items-center gap-1.5 transition-all ${
+            tab === 'notifications' ? 'badge-primary shadow-lg' : 'badge-muted'
+          }`}
+          onClick={() => setTab('notifications')}
+        >
+          <BellRing size={15} />
+          إدارة وتفضيلات التنبيهات والأولويات ({notificationRules.length})
         </button>
       </div>
 
@@ -623,12 +635,139 @@ export default function SettingsPage({ scale = 0.9, setScale }: SettingsPageProp
           </div>
         </div>
       )}
+
+      {/* ───────────────────────────────────────────────────────────────────────────── */}
+      {/* 4. NOTIFICATION RULES & SEVERITIES CONFIGURATION */}
+      {/* ───────────────────────────────────────────────────────────────────────────── */}
+      {tab === 'notifications' && (
+        <div className="glass-card p-6 flex flex-col gap-5">
+          <div className="flex items-center justify-between border-b pb-3 flex-wrap gap-3" style={{ borderColor: 'var(--clr-border)' }}>
+            <div>
+              <h3 className="font-bold text-lg text-amber-400 flex items-center gap-2">
+                <BellRing size={20} />
+                إدارة وقواعد وتفضيلات التنبيهات والأولويات
+              </h3>
+              <p className="text-xs text-[var(--clr-muted)] mt-0.5">
+                يمكن للمستخدم الرئيسي تفعيل أو إلغاء أي تنبيه وتغيير درجته (عادي، متوسط، مشدد) وتحديد الحدود النقدية
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4">
+            {notificationRules.map((rule, idx) => (
+              <div key={rule.rule_key} className="p-4 rounded-xl border bg-black/20 flex flex-col md:flex-row items-start md:items-center justify-between gap-4" style={{ borderColor: 'var(--clr-border)' }}>
+                <div className="flex items-start gap-3">
+                  <div className={`p-2.5 rounded-xl text-white font-bold shrink-0 ${rule.severity === 'high' ? 'bg-red-500/20 text-red-400' : rule.severity === 'medium' ? 'bg-amber-500/20 text-amber-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
+                    <BellRing size={20} />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-sm text-[var(--clr-text)] flex items-center gap-2">
+                      <span>{rule.name_ar}</span>
+                      <span className="text-xs font-mono text-[var(--clr-muted)]">({rule.rule_key})</span>
+                    </h4>
+                    <p className="text-xs text-[var(--clr-muted)] mt-1">{rule.description}</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 flex-wrap self-end md:self-center">
+                  {/* Enable Toggle */}
+                  <label className="flex items-center gap-2 text-xs font-bold cursor-pointer bg-white/5 px-3 py-1.5 rounded-lg border border-white/10">
+                    <input
+                      type="checkbox"
+                      checked={rule.is_enabled}
+                      onChange={e => {
+                        const updated = notificationRules.map((r, i) => i === idx ? { ...r, is_enabled: e.target.checked } : r)
+                        setNotificationRules(updated)
+                      }}
+                    />
+                    <span>{rule.is_enabled ? 'مُفعّل' : 'معطّل'}</span>
+                  </label>
+
+                  {/* Severity Selector */}
+                  <div className="flex items-center gap-1 bg-white/5 p-1 rounded-lg border border-white/10">
+                    <button
+                      type="button"
+                      className={`px-2.5 py-1 text-xs font-bold rounded-md transition-all ${rule.severity === 'low' ? 'bg-emerald-500 text-white shadow-sm' : 'text-gray-400 hover:text-white'}`}
+                      onClick={() => {
+                        const updated = notificationRules.map((r, i) => i === idx ? { ...r, severity: 'low' as const } : r)
+                        setNotificationRules(updated)
+                      }}
+                    >
+                      🟢 عادي
+                    </button>
+                    <button
+                      type="button"
+                      className={`px-2.5 py-1 text-xs font-bold rounded-md transition-all ${rule.severity === 'medium' ? 'bg-amber-500 text-white shadow-sm' : 'text-gray-400 hover:text-white'}`}
+                      onClick={() => {
+                        const updated = notificationRules.map((r, i) => i === idx ? { ...r, severity: 'medium' as const } : r)
+                        setNotificationRules(updated)
+                      }}
+                    >
+                      🟡 متوسط
+                    </button>
+                    <button
+                      type="button"
+                      className={`px-2.5 py-1 text-xs font-bold rounded-md transition-all ${rule.severity === 'high' ? 'bg-red-500 text-white shadow-sm' : 'text-gray-400 hover:text-white'}`}
+                      onClick={() => {
+                        const updated = notificationRules.map((r, i) => i === idx ? { ...r, severity: 'high' as const } : r)
+                        setNotificationRules(updated)
+                      }}
+                    >
+                      🔴 مشدد
+                    </button>
+                  </div>
+
+                  {/* Optional Amount Threshold for Liabilities */}
+                  {(rule.rule_key === 'due_liabilities_month' || rule.rule_key === 'due_liabilities_week') && (
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs font-bold text-amber-300">حد التنبيه النقدي (ج.م):</label>
+                      <input
+                        type="number"
+                        className="input text-xs font-mono w-28 py-1 px-2 text-amber-300 font-bold"
+                        value={rule.amount_threshold ?? ''}
+                        onChange={e => {
+                          const val = e.target.value ? parseFloat(e.target.value) : null
+                          const updated = notificationRules.map((r, i) => i === idx ? { ...r, amount_threshold: val } : r)
+                          setNotificationRules(updated)
+                        }}
+                        placeholder="بدون حد"
+                      />
+                    </div>
+                  )}
+
+                  {/* Save button per rule */}
+                  <button
+                    type="button"
+                    className="btn-primary text-xs py-1.5 px-3 font-bold"
+                    onClick={async () => {
+                      try {
+                        await updateNotificationRule({
+                          rule_key: rule.rule_key,
+                          is_enabled: rule.is_enabled,
+                          severity: rule.severity,
+                          amount_threshold: rule.amount_threshold,
+                          threshold_type: rule.threshold_type || 'total',
+                        })
+                        toast.success(`تم حفظ إعدادات تنبيه "${rule.name_ar}" بنجاح!`)
+                      } catch (err: any) {
+                        toast.error('فشل حفظ التنبيه: ' + err.toString())
+                      }
+                    }}
+                  >
+                    حفظ القواعد
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
 function AddUserModal({ onClose, onSave }: any) {
-  const [form, setForm] = useState({ username: '', display_name: '', password: '', role: 'staff', phone: '' })
+  const [form, setForm] = useState({ username: '', display_name: '', password: '', role: 'staff', phone: '', job_title: '' })
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }))
   return (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
@@ -637,6 +776,7 @@ function AddUserModal({ onClose, onSave }: any) {
         <div className="flex flex-col gap-4">
           <div><label className="label text-xs font-bold">اسم المستخدم *</label><input className="input text-sm font-bold" dir="ltr" value={form.username} onChange={e => set('username', e.target.value)} required /></div>
           <div><label className="label text-xs font-bold">الاسم الكامل *</label><input className="input text-sm font-bold" value={form.display_name} onChange={e => set('display_name', e.target.value)} required /></div>
+          <div><label className="label text-xs font-bold">المسمى الوظيفي (Job Title)</label><input className="input text-xs font-bold" placeholder="مثال: مدير مبيعات، محاسب، أمين مخزن..." value={form.job_title} onChange={e => set('job_title', e.target.value)} /></div>
           <div><label className="label text-xs font-bold">رقم الهاتف (لإرسال كود الواتساب OTP)</label><input className="input text-xs font-mono text-left" dir="ltr" placeholder="010XXXXXXXX" value={form.phone} onChange={e => set('phone', e.target.value)} /></div>
           <div><label className="label text-xs font-bold">كلمة المرور *</label><input type="password" className="input text-sm font-bold" value={form.password} onChange={e => set('password', e.target.value)} required /></div>
           <div>

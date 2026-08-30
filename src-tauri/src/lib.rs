@@ -120,6 +120,8 @@ pub fn run() {
             settings::get_settings,
             settings::set_setting,
             settings::get_dashboard_stats,
+            settings::get_notification_rules,
+            settings::update_notification_rule,
             // Suppliers
             suppliers::get_suppliers,
             suppliers::create_supplier,

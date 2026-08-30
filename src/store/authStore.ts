@@ -42,8 +42,9 @@ export const PERMISSIONS_LIST: PermissionDefinition[] = [
   { key: 'expenses_edit_delete', labelAr: 'تعديل وحذف المصروفات المسجلة', category: 'المصروفات والالتزامات', isSensitive: true, description: 'تعديل أو حذف المصروفات النقدية المسجلة (يولد إشعار للمدير)' },
   { key: 'manage_liabilities', labelAr: 'إدارة الالتزامات والاستحقاقات المالية', category: 'المصروفات والالتزامات', isSensitive: true, description: 'إنشاء وتسديد وتصدير الالتزامات والاستحقاقات المالية الموحدة' },
   
-  // Settings
-  { key: 'settings_manage', labelAr: 'إدارة الإعدادات والمستخدمين والصلاحيات', category: 'النظام', isSensitive: true, description: 'تعديل بيانات المتجر والمظهر وإدارة المستخدمين' },
+  // Settings & System
+  { key: 'settings_manage', labelAr: 'إدارة الإعدادات والمستخدمين والصلاحيات', category: 'النظام والصلاحيات', isSensitive: true, description: 'تعديل بيانات المتجر والمظهر وإدارة المستخدمين وتكويين التنبيهات والأولويات' },
+  { key: 'view_only', labelAr: 'وضع اطلاع فقط دون تعديل (Read-Only)', category: 'النظام والصلاحيات', isSensitive: true, description: 'تمكين المستخدم من الاطلاع والاستعلام فقط على كافة الشاشات مع حجب ومنع أي عمليات إضافة أو تعديل أو حفظ أو حذف' },
 ]
 
 export interface User {
@@ -55,6 +56,7 @@ export interface User {
   phone?: string | null
   permissions?: string | string[]
   created_at: string
+  job_title?: string | null
 }
 
 interface AuthState {
@@ -64,6 +66,8 @@ interface AuthState {
   login: (user: User, sessionId: string) => void
   logout: () => void
   hasPermission: (permKey: string) => boolean
+  isReadOnlyMode: () => boolean
+  canWrite: () => boolean
 }
 
 function parseUserPermissions(perms?: string | string[]): string[] {
@@ -95,11 +99,27 @@ export const useAuthStore = create<AuthState>()(
       hasPermission: (permKey: string) => {
         const { user } = get()
         if (!user) return false
-        // Super Admin has all permissions unconditionally
-        if (user.role === 'admin') return true
+        // Super Admin has all permissions unconditionally unless checking view_only specifically
+        if (user.role === 'admin' && permKey !== 'view_only') return true
 
         const userPerms = parseUserPermissions(user.permissions)
         return userPerms.includes(permKey) || userPerms.includes('*')
+      },
+
+      isReadOnlyMode: () => {
+        const { user } = get()
+        if (!user) return false
+        if (user.role === 'admin') return false
+        const userPerms = parseUserPermissions(user.permissions)
+        return userPerms.includes('view_only')
+      },
+
+      canWrite: () => {
+        const { user } = get()
+        if (!user) return false
+        if (user.role === 'admin') return true
+        const userPerms = parseUserPermissions(user.permissions)
+        return !userPerms.includes('view_only')
       },
     }),
     {

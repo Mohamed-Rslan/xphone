@@ -15,6 +15,7 @@ pub struct User {
     pub phone: Option<String>,
     pub permissions: Option<String>,
     pub created_at: String,
+    pub job_title: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -46,7 +47,7 @@ pub async fn login(
     let conn = state.pool.get()?;
 
     let result = conn.query_row(
-        "SELECT id, username, display_name, password_hash, role, is_active, phone, permissions, created_at
+        "SELECT id, username, display_name, password_hash, role, is_active, phone, permissions, created_at, job_title
          FROM users WHERE username = ?1 AND is_active = 1",
         rusqlite::params![payload.username],
         |row| {
@@ -60,6 +61,7 @@ pub async fn login(
                 row.get::<_, Option<String>>(6)?,
                 row.get::<_, Option<String>>(7)?,
                 row.get::<_, String>(8)?,
+                row.get::<_, Option<String>>(9)?,
             ))
         },
     );
@@ -69,7 +71,7 @@ pub async fn login(
             Err(AppError::Auth("اسم المستخدم أو كلمة المرور غير صحيحة".into()))
         }
         Err(e) => Err(AppError::Database(e)),
-        Ok((id, username, display_name, hash, role, is_active, phone, permissions, created_at)) => {
+        Ok((id, username, display_name, hash, role, is_active, phone, permissions, created_at, job_title)) => {
             let valid = verify(&payload.password, &hash)
                 .map_err(|e| AppError::Internal(e.to_string()))?;
             if !valid {
@@ -95,6 +97,7 @@ pub async fn login(
                     phone,
                     permissions: permissions.or_else(|| Some("[]".to_string())),
                     created_at,
+                    job_title,
                 },
             })
         }
@@ -112,7 +115,7 @@ pub async fn logout(state: State<'_, AppState>, session_id: String) -> Result<()
 pub async fn get_users(state: State<'_, AppState>) -> Result<Vec<User>, AppError> {
     let conn = state.pool.get()?;
     let mut stmt = conn.prepare(
-        "SELECT id, username, display_name, role, is_active, phone, permissions, created_at
+        "SELECT id, username, display_name, role, is_active, phone, permissions, created_at, job_title
          FROM users ORDER BY created_at ASC",
     )?;
     let users = stmt
@@ -126,6 +129,7 @@ pub async fn get_users(state: State<'_, AppState>) -> Result<Vec<User>, AppError
                 phone: row.get(5)?,
                 permissions: row.get(6)?,
                 created_at: row.get(7)?,
+                job_title: row.get(8)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -140,6 +144,7 @@ pub struct CreateUserPayload {
     pub role: String,
     pub phone: Option<String>,
     pub permissions: Option<Vec<String>>,
+    pub job_title: Option<String>,
 }
 
 #[tauri::command]
@@ -159,8 +164,8 @@ pub async fn create_user(
         .unwrap_or_else(|| "[]".to_string());
 
     conn.execute(
-        "INSERT INTO users (id, username, display_name, password_hash, role, phone, permissions, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        "INSERT INTO users (id, username, display_name, password_hash, role, phone, permissions, created_at, job_title)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
         rusqlite::params![
             id,
             payload.username,
@@ -169,7 +174,8 @@ pub async fn create_user(
             payload.role,
             payload.phone,
             perms_json,
-            now
+            now,
+            payload.job_title
         ],
     )?;
 
@@ -182,6 +188,7 @@ pub async fn create_user(
         phone: payload.phone,
         permissions: Some(perms_json),
         created_at: now,
+        job_title: payload.job_title,
     })
 }
 
@@ -194,6 +201,7 @@ pub struct UpdateUserPermissionsPayload {
     pub phone: Option<String>,
     pub permissions: Vec<String>,
     pub new_password: Option<String>,
+    pub job_title: Option<String>,
 }
 
 #[tauri::command]
@@ -209,7 +217,7 @@ pub async fn update_user_permissions(
             let pwd_hash = hash(pwd.trim(), 12).map_err(|e| AppError::Internal(e.to_string()))?;
             conn.execute(
                 "UPDATE users
-                 SET display_name = ?2, role = ?3, is_active = ?4, phone = ?5, permissions = ?6, password_hash = ?7
+                 SET display_name = ?2, role = ?3, is_active = ?4, phone = ?5, permissions = ?6, password_hash = ?7, job_title = ?8
                  WHERE id = ?1",
                 rusqlite::params![
                     payload.user_id,
@@ -218,7 +226,8 @@ pub async fn update_user_permissions(
                     payload.is_active,
                     payload.phone,
                     perms_json,
-                    pwd_hash
+                    pwd_hash,
+                    payload.job_title
                 ],
             )?;
             return Ok(());
@@ -227,7 +236,7 @@ pub async fn update_user_permissions(
 
     conn.execute(
         "UPDATE users
-         SET display_name = ?2, role = ?3, is_active = ?4, phone = ?5, permissions = ?6
+         SET display_name = ?2, role = ?3, is_active = ?4, phone = ?5, permissions = ?6, job_title = ?7
          WHERE id = ?1",
         rusqlite::params![
             payload.user_id,
@@ -235,7 +244,8 @@ pub async fn update_user_permissions(
             payload.role,
             payload.is_active,
             payload.phone,
-            perms_json
+            perms_json,
+            payload.job_title
         ],
     )?;
 

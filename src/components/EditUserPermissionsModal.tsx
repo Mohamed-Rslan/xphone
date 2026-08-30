@@ -16,6 +16,7 @@ export default function EditUserPermissionsModal({
   onUpdated,
 }: EditUserPermissionsModalProps) {
   const [displayName, setDisplayName] = useState(user.display_name)
+  const [jobTitle, setJobTitle] = useState(user.job_title || '')
   const [role, setRole] = useState<'admin' | 'staff'>(user.role as any)
   const [isActive, setIsActive] = useState(user.is_active)
   const [phone, setPhone] = useState(user.phone || '')
@@ -63,8 +64,9 @@ export default function EditUserPermissionsModal({
         phone: phone.trim() || null,
         permissions: role === 'admin' ? PERMISSIONS_LIST.map(p => p.key) : selectedPerms,
         new_password: newPassword.trim() ? newPassword.trim() : null,
+        job_title: jobTitle.trim() || null,
       })
-      toast.success('تم تحديث بيانات وصلاحيات المستخدم بنجاح!')
+      toast.success('تم تحديث بيانات وصلاحيات والمسمى الوظيفي للمستخدم بنجاح!')
       onUpdated()
       onClose()
     } catch (err: any) {
@@ -112,6 +114,20 @@ export default function EditUserPermissionsModal({
                 value={displayName}
                 onChange={e => setDisplayName(e.target.value)}
                 required
+              />
+            </div>
+
+            <div>
+              <label className="label text-xs font-bold mb-1 flex items-center gap-1">
+                <UserIcon size={13} className="text-blue-400" />
+                المسمى الوظيفي (Designation / Job Title)
+              </label>
+              <input
+                type="text"
+                className="input w-full text-xs font-bold"
+                placeholder="مثال: مدير مبيعات، محاسب رئيسي، فني صيانة..."
+                value={jobTitle}
+                onChange={e => setJobTitle(e.target.value)}
               />
             </div>
 

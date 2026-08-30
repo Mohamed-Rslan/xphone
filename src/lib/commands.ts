@@ -252,9 +252,30 @@ export const processSalePartialReturn = (payload: any) => invoke<void>('process_
 export const processSaleReturn = (payload: any) => invoke<void>('process_sale_partial_return', { payload })
 
 // ─── Settings & Dashboard ───────────────────────────────────────
+export interface NotificationRule {
+  id: string
+  rule_key: string
+  name_ar: string
+  description?: string | null
+  is_enabled: boolean
+  severity: 'low' | 'medium' | 'high'
+  amount_threshold?: number | null
+  threshold_type?: 'total' | 'single' | null
+  updated_at: string
+}
+
 export const getSettings = () => invoke<any[]>('get_settings')
 export const setSetting = (key: string, value: string) =>
   invoke<void>('set_setting', { key, value })
+
+export const getNotificationRules = () => invoke<NotificationRule[]>('get_notification_rules')
+export const updateNotificationRule = (payload: {
+  rule_key: string
+  is_enabled: boolean
+  severity: string
+  amount_threshold?: number | null
+  threshold_type?: string | null
+}) => invoke<void>('update_notification_rule', { payload })
 
 export const getDashboardStats = () => invoke<any>('get_dashboard_stats')
 
