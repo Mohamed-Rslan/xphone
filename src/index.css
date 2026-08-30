@@ -1,0 +1,753 @@
+@import "tailwindcss";
+@source "../src/**/*.{ts,tsx}";
+
+/* ── Tailwind v4 Theme Tokens ── */
+@theme {
+  --font-sans: 'Cairo', system-ui, sans-serif;
+
+  --color-primary:     #7c6bff;
+  --color-primary-50:  #f0eeff;
+  --color-primary-100: #e3deff;
+  --color-primary-200: #c9c0ff;
+  --color-primary-500: #7c6bff;
+  --color-primary-600: #6655e8;
+  --color-primary-700: #5242c4;
+
+  --color-accent:      #00d4aa;
+  --color-accent-400:  #00efc0;
+  --color-accent-600:  #00b08c;
+
+  --color-danger:      #ff5c7c;
+  --color-warning:     #ffab3e;
+  --color-success:     #44e887;
+
+  --radius-xl:  14px;
+  --radius-2xl: 20px;
+  --radius-3xl: 28px;
+
+  --animate-fade-in:        fadeIn 0.3s ease-in-out;
+  --animate-slide-up:       slideUp 0.3s ease-out;
+  --animate-slide-in-right: slideInRight 0.3s ease-out;
+  --animate-pulse-glow:     pulseGlow 2s ease-in-out infinite;
+}
+
+/* ── Global CSS Variables (glass sy/* ── Global CSS Variables (glass system) ── */
+:root, [data-theme="night_cyber"] {
+  --clr-bg:           #080812;
+  --clr-bg-2:         #0d0d1f;
+  --clr-surface:      rgba(255, 255, 255, 0.04);
+  --clr-surface-2:    rgba(255, 255, 255, 0.08);
+  --clr-surface-3:    rgba(255, 255, 255, 0.13);
+  --clr-border:       rgba(255, 255, 255, 0.08);
+  --clr-border-2:     rgba(255, 255, 255, 0.15);
+
+  --clr-primary:      #7c6bff;
+  --clr-primary-dim:  rgba(124, 107, 255, 0.15);
+  --clr-primary-glow: rgba(124, 107, 255, 0.4);
+  --clr-accent:       #00d4aa;
+  --clr-accent-dim:   rgba(0, 212, 170, 0.15);
+  --clr-danger:       #ff5c7c;
+  --clr-danger-dim:   rgba(255, 92, 124, 0.15);
+  --clr-warning:      #ffab3e;
+  --clr-warning-dim:  rgba(255, 171, 62, 0.15);
+  --clr-success:      #44e887;
+  --clr-success-dim:  rgba(68, 232, 135, 0.15);
+
+  --clr-text:         #f0f0fa;
+  --clr-text-2:       rgba(240, 240, 250, 0.7);
+  --clr-muted:        rgba(240, 240, 250, 0.4);
+
+  --glass-bg:         rgba(13, 13, 31, 0.72);
+  --glass-blur:       blur(28px) saturate(200%);
+  --glass-border:     1px solid rgba(255, 255, 255, 0.09);
+  --glass-shadow:     0 8px 40px rgba(0, 0, 0, 0.55);
+  --glass-shadow-lg:  0 20px 72px rgba(0, 0, 0, 0.65);
+
+  --sidebar-width:    260px;
+  --topbar-height:    64px;
+  --transition:       0.2s ease;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   4 DAY / LIGHT THEMES (ثيمات نهارية واضحة ومريحة بتباين ممتاز)
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── 1. Clean Corporate Blue (نهاري أزرق ناصع) ── */
+[data-theme="light_corporate"] {
+  --clr-bg:           #f8fafc;
+  --clr-bg-2:         #e2e8f0;
+  --clr-surface:      #ffffff;
+  --clr-surface-2:    #f1f5f9;
+  --clr-surface-3:    #e2e8f0;
+  --clr-border:       #cbd5e1;
+  --clr-border-2:     #94a3b8;
+
+  --clr-primary:      #2563eb;
+  --clr-primary-dim:  rgba(37, 99, 235, 0.12);
+  --clr-primary-glow: rgba(37, 99, 235, 0.25);
+  --clr-accent:       #0d9488;
+  --clr-accent-dim:   rgba(13, 148, 136, 0.12);
+  --clr-danger:       #e11d48;
+  --clr-danger-dim:   rgba(225, 29, 72, 0.1);
+  --clr-warning:      #d97706;
+  --clr-warning-dim:  rgba(217, 119, 6, 0.1);
+  --clr-success:      #16a34a;
+  --clr-success-dim:  rgba(22, 163, 74, 0.1);
+
+  --clr-text:         #0f172a;
+  --clr-text-2:       #334155;
+  --clr-muted:        #64748b;
+
+  --glass-bg:         rgba(255, 255, 255, 0.95);
+  --glass-border:     1px solid #cbd5e1;
+  --glass-shadow:     0 4px 20px rgba(0, 0, 0, 0.07);
+  --glass-shadow-lg:  0 10px 30px rgba(0, 0, 0, 0.1);
+}
+
+/* ── 2. Mint Emerald Light (نهاري زمردي مريح للعين) ── */
+[data-theme="light_emerald"] {
+  --clr-bg:           #f0fdf4;
+  --clr-bg-2:         #dcfce7;
+  --clr-surface:      #ffffff;
+  --clr-surface-2:    #f0fdf4;
+  --clr-surface-3:    #dcfce7;
+  --clr-border:       #bbf7d0;
+  --clr-border-2:     #86efac;
+
+  --clr-primary:      #059669;
+  --clr-primary-dim:  rgba(5, 150, 105, 0.12);
+  --clr-primary-glow: rgba(5, 150, 105, 0.25);
+  --clr-accent:       #0284c7;
+  --clr-accent-dim:   rgba(2, 132, 199, 0.12);
+  --clr-danger:       #e11d48;
+  --clr-danger-dim:   rgba(225, 29, 72, 0.1);
+  --clr-warning:      #d97706;
+  --clr-warning-dim:  rgba(217, 119, 6, 0.1);
+  --clr-success:      #059669;
+  --clr-success-dim:  rgba(5, 150, 105, 0.1);
+
+  --clr-text:         #064e3b;
+  --clr-text-2:       #14532d;
+  --clr-muted:        #4b7a64;
+
+  --glass-bg:         rgba(255, 255, 255, 0.95);
+  --glass-border:     1px solid #bbf7d0;
+  --glass-shadow:     0 4px 20px rgba(6, 78, 59, 0.07);
+  --glass-shadow-lg:  0 10px 30px rgba(6, 78, 59, 0.1);
+}
+
+/* ── 3. Warm Amber Light (نهاري دافئ وعنبري) ── */
+[data-theme="light_warm"] {
+  --clr-bg:           #fffbeb;
+  --clr-bg-2:         #fef3c7;
+  --clr-surface:      #ffffff;
+  --clr-surface-2:    #fffbeb;
+  --clr-surface-3:    #fef3c7;
+  --clr-border:       #fde68a;
+  --clr-border-2:     #fcd34d;
+
+  --clr-primary:      #d97706;
+  --clr-primary-dim:  rgba(217, 119, 6, 0.12);
+  --clr-primary-glow: rgba(217, 119, 6, 0.25);
+  --clr-accent:       #ea580c;
+  --clr-accent-dim:   rgba(234, 88, 12, 0.12);
+  --clr-danger:       #dc2626;
+  --clr-danger-dim:   rgba(220, 38, 38, 0.1);
+  --clr-warning:      #d97706;
+  --clr-warning-dim:  rgba(217, 119, 6, 0.1);
+  --clr-success:      #16a34a;
+  --clr-success-dim:  rgba(22, 163, 74, 0.1);
+
+  --clr-text:         #451a03;
+  --clr-text-2:       #78350f;
+  --clr-muted:        #92400e;
+
+  --glass-bg:         rgba(255, 255, 255, 0.95);
+  --glass-border:     1px solid #fde68a;
+  --glass-shadow:     0 4px 20px rgba(69, 26, 3, 0.07);
+  --glass-shadow-lg:  0 10px 30px rgba(69, 26, 3, 0.1);
+}
+
+/* ── 4. Crystal Indigo Light (نهاري كريستالي ناصع) ── */
+[data-theme="light_crystal"] {
+  --clr-bg:           #f5f3ff;
+  --clr-bg-2:         #ede9fe;
+  --clr-surface:      #ffffff;
+  --clr-surface-2:    #f5f3ff;
+  --clr-surface-3:    #ede9fe;
+  --clr-border:       #ddd6fe;
+  --clr-border-2:     #c4b5fd;
+
+  --clr-primary:      #6366f1;
+  --clr-primary-dim:  rgba(99, 102, 241, 0.12);
+  --clr-primary-glow: rgba(99, 102, 241, 0.25);
+  --clr-accent:       #06b6d4;
+  --clr-accent-dim:   rgba(6, 182, 212, 0.12);
+  --clr-danger:       #e11d48;
+  --clr-danger-dim:   rgba(225, 29, 72, 0.1);
+  --clr-warning:      #d97706;
+  --clr-warning-dim:  rgba(217, 119, 6, 0.1);
+  --clr-success:      #16a34a;
+  --clr-success-dim:  rgba(22, 163, 74, 0.1);
+
+  --clr-text:         #1e1b4b;
+  --clr-text-2:       #312e81;
+  --clr-muted:        #6366f1;
+
+  --glass-bg:         rgba(255, 255, 255, 0.95);
+  --glass-border:     1px solid #ddd6fe;
+  --glass-shadow:     0 4px 20px rgba(30, 27, 75, 0.07);
+  --glass-shadow-lg:  0 10px 30px rgba(30, 27, 75, 0.1);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   4 NIGHT / DARK THEMES (ثيمات ليلية مريحة وفخمة)
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── 5. Minimal Clean Dark (ليلي بسيط وعملي) ── */
+[data-theme="minimal_simple"] {
+  --clr-bg:           #111318;
+  --clr-bg-2:         #181b22;
+  --clr-surface:      #1c202a;
+  --clr-surface-2:    #242936;
+  --clr-surface-3:    #2d3343;
+  --clr-border:       #2b3140;
+  --clr-border-2:     #3b4356;
+
+  --clr-primary:      #4f8df9;
+  --clr-primary-dim:  rgba(79, 141, 249, 0.12);
+  --clr-primary-glow: rgba(79, 141, 249, 0.25);
+  --clr-accent:       #2dd4bf;
+  --clr-accent-dim:   rgba(45, 212, 191, 0.12);
+  --clr-danger:       #f87171;
+  --clr-danger-dim:   rgba(248, 113, 113, 0.12);
+  --clr-warning:      #fbbf24;
+  --clr-warning-dim:  rgba(251, 191, 36, 0.12);
+  --clr-success:      #34d399;
+  --clr-success-dim:  rgba(52, 211, 153, 0.12);
+
+  --clr-text:         #f1f5f9;
+  --clr-text-2:       #cbd5e1;
+  --clr-muted:        #94a3b8;
+
+  --glass-bg:         #161922;
+  --glass-blur:       none;
+  --glass-border:     1px solid #2b3140;
+  --glass-shadow:     0 4px 16px rgba(0, 0, 0, 0.35);
+  --glass-shadow-lg:  0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+/* ── 6. Deep Ocean Blue (ليلي أزرق محيطي) ── */
+[data-theme="deep_ocean"] {
+  --clr-bg:           #030c1b;
+  --clr-bg-2:         #081a36;
+  --clr-surface:      rgba(56, 189, 248, 0.05);
+  --clr-surface-2:    rgba(56, 189, 248, 0.09);
+  --clr-surface-3:    rgba(56, 189, 248, 0.14);
+  --clr-border:       rgba(56, 189, 248, 0.12);
+  --clr-border-2:     rgba(56, 189, 248, 0.22);
+
+  --clr-primary:      #38bdf8;
+  --clr-primary-dim:  rgba(56, 189, 248, 0.15);
+  --clr-primary-glow: rgba(56, 189, 248, 0.45);
+  --clr-accent:       #818cf8;
+  --clr-accent-dim:   rgba(129, 140, 248, 0.15);
+  --clr-danger:       #fb7185;
+  --clr-danger-dim:   rgba(251, 113, 133, 0.15);
+  --clr-warning:      #fbbf24;
+  --clr-warning-dim:  rgba(251, 191, 36, 0.15);
+  --clr-success:      #34d399;
+  --clr-success-dim:  rgba(52, 211, 153, 0.15);
+
+  --clr-text:         #f0f9ff;
+  --clr-text-2:       rgba(240, 249, 255, 0.75);
+  --clr-muted:        rgba(240, 249, 255, 0.45);
+
+  --glass-bg:         rgba(8, 26, 54, 0.75);
+  --glass-border:     1px solid rgba(56, 189, 248, 0.15);
+  --glass-shadow:     0 8px 40px rgba(0, 0, 0, 0.65);
+  --glass-shadow-lg:  0 20px 72px rgba(0, 0, 0, 0.75);
+}
+
+/* ── 7. Royal Gold & Amber (ليلي ذهبي ملكي) ── */
+[data-theme="royal_gold"] {
+  --clr-bg:           #0f0b04;
+  --clr-bg-2:         #1c1508;
+  --clr-surface:      rgba(245, 158, 11, 0.05);
+  --clr-surface-2:    rgba(245, 158, 11, 0.09);
+  --clr-surface-3:    rgba(245, 158, 11, 0.14);
+  --clr-border:       rgba(245, 158, 11, 0.12);
+  --clr-border-2:     rgba(245, 158, 11, 0.22);
+
+  --clr-primary:      #f59e0b;
+  --clr-primary-dim:  rgba(245, 158, 11, 0.15);
+  --clr-primary-glow: rgba(245, 158, 11, 0.45);
+  --clr-accent:       #fbbf24;
+  --clr-accent-dim:   rgba(251, 191, 36, 0.15);
+  --clr-danger:       #ef4444;
+  --clr-danger-dim:   rgba(239, 68, 68, 0.15);
+  --clr-warning:      #f97316;
+  --clr-warning-dim:  rgba(249, 115, 22, 0.15);
+  --clr-success:      #10b981;
+  --clr-success-dim:  rgba(16, 185, 129, 0.15);
+
+  --clr-text:         #fefce8;
+  --clr-text-2:       rgba(254, 252, 232, 0.75);
+  --clr-muted:        rgba(254, 252, 232, 0.45);
+
+  --glass-bg:         rgba(28, 21, 8, 0.75);
+  --glass-border:     1px solid rgba(245, 158, 11, 0.16);
+  --glass-shadow:     0 8px 40px rgba(0, 0, 0, 0.65);
+  --glass-shadow-lg:  0 20px 72px rgba(0, 0, 0, 0.75);
+}
+
+/* ── Base Reset ── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: 'Cairo', system-ui, sans-serif;
+  color: var(--clr-text);
+  background: var(--clr-bg);
+  direction: rtl;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Custom Scrollbar ── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(124,107,255,0.25); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(124,107,255,0.45); }
+
+/* ── Keyframes ── */
+@keyframes fadeIn        { from { opacity: 0 } to { opacity: 1 } }
+@keyframes slideUp       { from { transform: translateY(14px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
+@keyframes slideInRight  { from { transform: translateX(18px); opacity: 0 } to { transform: translateX(0); opacity: 1 } }
+@keyframes pulseGlow {
+  0%,100% { box-shadow: 0 0 20px rgba(124,107,255,0.25) }
+  50%      { box-shadow: 0 0 48px rgba(124,107,255,0.55) }
+}
+
+/* ── Ambient Background Mesh ── */
+body::before {
+  content: '';
+  position: fixed;
+  top: -40%;
+  right: -15%;
+  width: 700px;
+  height: 700px;
+  background: radial-gradient(circle, rgba(124,107,255,0.09) 0%, transparent 68%);
+  pointer-events: none;
+  z-index: 0;
+}
+body::after {
+  content: '';
+  position: fixed;
+  bottom: -25%;
+  left: -8%;
+  width: 550px;
+  height: 550px;
+  background: radial-gradient(circle, rgba(0,212,170,0.07) 0%, transparent 68%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── Glass Card ── */
+.glass-card {
+  position: relative;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: var(--glass-border);
+  border-radius: 20px;
+  box-shadow: var(--glass-shadow);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s ease;
+}
+.glass-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--glass-shadow-lg), 0 0 20px rgba(124,107,255,0.18);
+  border-color: rgba(124,107,255,0.3);
+}
+.glass-surface {
+  background: var(--clr-surface);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--clr-border);
+  border-radius: 12px;
+}
+
+/* ── Buttons ── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-family: 'Cairo', sans-serif;
+  font-weight: 600;
+  border-radius: 12px;
+  border: none;
+  outline: none;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+  white-space: nowrap;
+}
+.btn:disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
+
+.btn-primary {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  font-family: 'Cairo', sans-serif; font-weight: 600; border-radius: 12px;
+  border: none; outline: none; cursor: pointer; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+  padding: 10px 20px;
+  font-size: 14px;
+  background: linear-gradient(135deg, var(--clr-primary) 0%, #9082ff 100%);
+  color: white;
+  box-shadow: 0 4px 18px rgba(124,107,255,0.38);
+}
+.btn-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #8e7fff 0%, #9b8eff 100%);
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 8px 24px rgba(124,107,255,0.5);
+}
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-secondary {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  font-family: 'Cairo', sans-serif; font-weight: 600; border-radius: 12px;
+  cursor: pointer; transition: all 0.2s ease; white-space: nowrap;
+  padding: 10px 20px;
+  font-size: 14px;
+  background: var(--clr-surface-2);
+  color: var(--clr-text);
+  border: 1px solid var(--clr-border-2);
+  outline: none;
+}
+.btn-secondary:hover:not(:disabled) {
+  background: var(--clr-surface-3);
+  transform: translateY(-2px);
+  border-color: rgba(255,255,255,0.25);
+}
+.btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-danger {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  font-family: 'Cairo', sans-serif; font-weight: 600; border-radius: 12px;
+  cursor: pointer; transition: all 0.2s ease; white-space: nowrap;
+  padding: 10px 20px; font-size: 14px; outline: none;
+  background: var(--clr-danger-dim);
+  color: var(--clr-danger);
+  border: 1px solid rgba(255,92,124,0.2);
+}
+.btn-danger:hover:not(:disabled) {
+  background: var(--clr-danger);
+  color: white;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(255,92,124,0.3);
+}
+.btn-danger:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-icon {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  font-family: 'Cairo', sans-serif; font-weight: 600;
+  cursor: pointer; transition: all 0.18s ease; outline: none;
+  padding: 8px;
+  background: var(--clr-surface);
+  color: var(--clr-text-2);
+  border: 1px solid var(--clr-border);
+  border-radius: 8px;
+}
+.btn-icon:hover {
+  background: var(--clr-surface-2);
+  color: var(--clr-text);
+  transform: scale(1.05);
+}
+
+/* ── Inputs ── */
+.input {
+  width: 100%;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-family: 'Cairo', sans-serif;
+  border-radius: 12px;
+  border: 1px solid var(--clr-border);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--clr-text);
+  outline: none;
+  transition: all 0.2s ease;
+  direction: inherit;
+}
+.input::placeholder { color: var(--clr-muted); }
+.input:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.04);
+}
+.input:focus {
+  border-color: var(--clr-primary);
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: 0 0 0 3px var(--clr-primary-dim), 0 0 12px rgba(124,107,255,0.2);
+}
+textarea.input { resize: vertical; }
+
+select.input {
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='rgba(240,240,250,0.4)'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: left 12px center;
+  background-size: 16px;
+  padding-left: 38px;
+}
+select.input option { background: var(--clr-bg-2); color: var(--clr-text); }
+
+/* ═══════════════════════════════════════════════════════════════════
+   THEME CONTRAST & ACCESSIBILITY GUARANTEE RULES
+   ═══════════════════════════════════════════════════════════════════ */
+
+[data-theme^="light_"] {
+  color: var(--clr-text);
+}
+
+[data-theme^="light_"] .data-table thead th {
+  background: var(--clr-surface-3);
+  color: var(--clr-text);
+  border-bottom: 2px solid var(--clr-border-2);
+}
+
+[data-theme^="light_"] .data-table tbody td {
+  color: var(--clr-text);
+}
+
+[data-theme^="light_"] .data-table tbody tr:hover {
+  background: var(--clr-surface-2);
+}
+
+[data-theme^="light_"] .glass-card {
+  background: rgba(255, 255, 255, 0.96);
+  border-color: var(--clr-border);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+}
+
+[data-theme^="light_"] .input {
+  background: #ffffff;
+  color: var(--clr-text);
+  border-color: var(--clr-border);
+}
+
+[data-theme^="light_"] .input::placeholder {
+  color: var(--clr-muted);
+}
+
+[data-theme^="light_"] .text-white:not(.btn-primary *):not(.badge-primary *):not(.btn-danger *) {
+  color: var(--clr-text) !important;
+}
+
+[data-theme^="light_"] .text-gray-300,
+[data-theme^="light_"] .text-gray-400,
+[data-theme^="light_"] .text-slate-300 {
+  color: var(--clr-text-2) !important;
+}
+
+.label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 6px;
+  color: var(--clr-text-2);
+}
+
+/* ── Badges ── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: 'Cairo', sans-serif;
+}
+.badge-primary { background: var(--clr-primary-dim); color: var(--clr-primary); }
+.badge-success { background: var(--clr-success-dim); color: var(--clr-success); }
+.badge-warning { background: var(--clr-warning-dim); color: var(--clr-warning); }
+.badge-danger  { background: var(--clr-danger-dim);  color: var(--clr-danger); }
+.badge-muted   { background: var(--clr-surface-2);   color: var(--clr-muted); }
+
+/* ── Data Table ── */
+.data-table { width: 100%; font-size: 14px; border-collapse: separate; border-spacing: 0; }
+.data-table thead th {
+  padding: 14px 18px;
+  text-align: right;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--clr-text-2);
+  border-bottom: 2px solid var(--clr-border-2);
+  background: rgba(13, 13, 31, 0.4);
+  white-space: nowrap;
+  letter-spacing: 0.5px;
+}
+.data-table tbody tr {
+  border-bottom: 1px solid var(--clr-border);
+  transition: all 0.2s ease;
+}
+.data-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.03);
+  transform: scale(1.002);
+}
+.data-table tbody tr:last-child td { border-bottom: none; }
+.data-table tbody td {
+  padding: 14px 18px;
+  color: var(--clr-text);
+  border-bottom: 1px solid var(--clr-border);
+}
+
+/* ── Modal ── */
+.modal-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 99999 !important;
+  background: rgba(0,0,0,0.76) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  padding: 16px !important;
+  animation: fadeIn 0.18s ease;
+}
+.modal-content {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: var(--glass-border);
+  border-radius: 20px;
+  box-shadow: var(--glass-shadow-lg);
+  padding: 24px;
+  width: 100%;
+  max-width: 580px;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+  z-index: 100000;
+  animation: scaleIn 0.2s ease;
+}
+
+/* ── KPI Card ── */
+.kpi-card {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: var(--glass-border);
+  border-radius: 20px;
+  box-shadow: var(--glass-shadow);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--glass-shadow-lg);
+}
+.kpi-value {
+  font-size: 28px;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--clr-text) 0%, var(--clr-primary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.kpi-label { font-size: 12px; font-weight: 500; color: var(--clr-muted); }
+
+/* ── Sidebar Nav Link ── */
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--clr-text-2);
+  cursor: pointer;
+  transition: all 0.18s ease;
+  border: none;
+  background: transparent;
+  width: 100%;
+  font-family: 'Cairo', sans-serif;
+  text-align: right;
+}
+.nav-link:hover { background: var(--clr-surface-2); color: var(--clr-text); }
+.nav-link.active {
+  background: var(--clr-primary-dim);
+  color: var(--clr-primary);
+  font-weight: 700;
+  box-shadow: inset 0 0 0 1px var(--clr-border-2);
+}
+
+/* ── Page Header ── */
+.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+.page-title {
+  font-size: 26px;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--clr-text) 40%, var(--clr-primary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Status Variants ── */
+.status-received, .status-in_progress, .status-ready, .status-delivered,
+.status-cancelled, .status-completed, .status-returned, .status-draft,
+.status-ordered, .status-partial {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: 'Cairo', sans-serif;
+}
+
+.status-received    { background: var(--clr-surface-2); color: var(--clr-muted); }
+.status-in_progress { background: var(--clr-warning-dim); color: var(--clr-warning); }
+.status-ready       { background: var(--clr-primary-dim); color: var(--clr-primary); }
+.status-delivered   { background: var(--clr-success-dim); color: var(--clr-success); }
+.status-cancelled   { background: var(--clr-danger-dim); color: var(--clr-danger); }
+.status-completed   { background: var(--clr-success-dim); color: var(--clr-success); }
+.status-returned    { background: var(--clr-danger-dim); color: var(--clr-danger); }
+.status-draft       { background: var(--clr-surface-2); color: var(--clr-muted); }
+.status-ordered     { background: var(--clr-warning-dim); color: var(--clr-warning); }
+.status-partial     { background: var(--clr-warning-dim); color: var(--clr-warning); }
+
+/* ── Animate utilities ── */
+.animate-fade-in        { animation: fadeIn 0.3s ease-in-out; }
+.animate-slide-up       { animation: fadeIn 0.25s ease-out; }
+.animate-slide-in-right { animation: fadeIn 0.25s ease-out; }
+.animate-pulse-glow     { animation: pulseGlow 2s ease-in-out infinite; }
+.animate-spin           { animation: spin 1s linear infinite; }
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.97); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── LTR brand spans ── */
+[dir="ltr"] { direction: ltr; unicode-bidi: embed; }

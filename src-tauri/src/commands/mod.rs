@@ -1,0 +1,11 @@
+pub mod auth;
+pub mod products;
+pub mod sales;
+pub mod customers;
+pub mod repairs;
+pub mod monetary;
+pub mod accounting;
+pub mod settings;
+pub mod suppliers;
+pub mod system;
+pub mod notifications;

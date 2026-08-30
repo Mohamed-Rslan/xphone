@@ -1,0 +1,33 @@
+[package]
+name = "xphone"
+version = "0.1.0"
+description = "XPhone Store Management"
+authors = ["XPhone"]
+edition = "2021"
+
+[lib]
+name = "xphone_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri            = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-fs     = "2"
+tauri-plugin-shell  = "2"
+tauri-plugin-opener = "2"
+serde            = { version = "1", features = ["derive"] }
+serde_json       = "1"
+rusqlite         = { version = "0.31", features = ["bundled"] }
+r2d2             = "0.8"
+r2d2_sqlite      = "0.24"
+chrono           = { version = "0.4", features = ["serde"] }
+uuid             = { version = "1", features = ["v4"] }
+bcrypt           = "0.15"
+anyhow           = "1"
+thiserror        = "1"
+rfd              = "0.15"
+base64           = "0.22"
+
