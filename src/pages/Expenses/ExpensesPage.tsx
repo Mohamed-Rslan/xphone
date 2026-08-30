@@ -333,6 +333,69 @@ export default function ExpensesPage() {
     win.document.close()
   }
 
+  const getYesterdayStr = () => {
+    const d = new Date()
+    d.setDate(d.getDate() - 1)
+    const year = d.getFullYear()
+    const month = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+
+  const getWeekAgoStr = () => {
+    const d = new Date()
+    d.setDate(d.getDate() - 7)
+    const year = d.getFullYear()
+    const month = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+
+  const handleQuickFilter = (type: 'today' | 'yesterday' | 'week' | 'month') => {
+    const t = today()
+    let f = t
+    let targetTo = t
+    if (type === 'today') {
+      f = t
+    } else if (type === 'yesterday') {
+      f = getYesterdayStr()
+      targetTo = f
+    } else if (type === 'week') {
+      f = getWeekAgoStr()
+    } else if (type === 'month') {
+      f = monthStart()
+    }
+    setDateFrom(f)
+    setDateTo(targetTo)
+  }
+
+  // Filtered expenses list
+  const filteredExpenses = expenses.filter(exp => {
+    if (exp.expense_date) {
+      if (dateFrom && exp.expense_date < dateFrom) return false
+      if (dateTo && exp.expense_date > dateTo) return false
+    }
+    if (categoryFilter !== 'all' && exp.category_id.toString() !== categoryFilter) return false
+    if (recurrenceFilter === 'recurring' && !exp.is_recurring) return false
+    if (recurrenceFilter === 'casual' && exp.is_recurring) return false
+    return true
+  })
+
+  // Filtered accrued expenses list
+  const filteredAccruedExpenses = accruedExpenses.filter(accr => {
+    if (accr.created_at || accr.due_date) {
+      const targetDate = (accr.created_at || accr.due_date).slice(0, 10)
+      if (dateFrom && targetDate < dateFrom) return false
+      if (dateTo && targetDate > dateTo) return false
+    }
+    return true
+  })
+
+  // Calculations for selected period
+  const totalCashExpenses = filteredExpenses.reduce((sum, exp) => sum + (exp.amount || 0), 0)
+  const unpaidAccruedTotal = filteredAccruedExpenses.filter(a => a.status === 'unpaid').reduce((sum, a) => sum + (a.amount || 0), 0)
+  const recurringCount = filteredExpenses.filter(exp => exp.is_recurring).length
+
   // Export Expenses to Excel
   const handleExportExcel = async () => {
     const t = toast.loading('جاري فتح وتوليد ملف Excel للمصروفات...')
@@ -343,19 +406,6 @@ export default function ExpensesPage() {
       toast.error('فشل تصدير التقرير: ' + err.toString(), { id: t })
     }
   }
-
-  // Filtered expenses list
-  const filteredExpenses = expenses.filter(exp => {
-    if (categoryFilter !== 'all' && exp.category_id.toString() !== categoryFilter) return false
-    if (recurrenceFilter === 'recurring' && !exp.is_recurring) return false
-    if (recurrenceFilter === 'casual' && exp.is_recurring) return false
-    return true
-  })
-
-  // Calculations
-  const totalCashExpenses = filteredExpenses.reduce((sum, exp) => sum + exp.amount, 0)
-  const unpaidAccruedTotal = accruedExpenses.filter(a => a.status === 'unpaid').reduce((sum, a) => sum + a.amount, 0)
-  const recurringCount = filteredExpenses.filter(exp => exp.is_recurring).length
 
   return (
     <div className="flex flex-col gap-6 animate-slide-up pb-12">
@@ -385,47 +435,32 @@ export default function ExpensesPage() {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="glass-card p-4 flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(124,107,255,0.12)', color: 'var(--clr-primary)' }}>
-            <TrendingDown size={24} />
-          </div>
-          <div>
-            <div className="text-xs font-bold" style={{ color: 'var(--clr-muted)' }}>إجمالي المصروفات النقدية</div>
-            <div className="text-xl font-black font-mono mt-1 text-red-400">{formatEGP(totalCashExpenses)}</div>
-          </div>
+      {/* Top Summary Table (جدول إجماليات المصروفات للمدة المحددة) */}
+      <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--clr-border)', background: 'var(--clr-surface-2)' }}>
+        <div className="px-3.5 py-2 border-b flex items-center justify-between text-xs font-bold text-[var(--clr-primary)]" style={{ borderColor: 'var(--clr-border)', background: 'var(--clr-surface-3)' }}>
+          <span>📊 جدول إجماليات المصروفات للمدة المحددة تلقائياً:</span>
+          <span className="font-mono text-[var(--clr-text)]">
+            من {formatDate(dateFrom)} إلى {formatDate(dateTo)}
+          </span>
         </div>
-
-        <div className="glass-card p-4 flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(255,171,62,0.12)', color: '#ffab3e' }}>
-            <AlertCircle size={24} />
-          </div>
-          <div>
-            <div className="text-xs font-bold" style={{ color: 'var(--clr-muted)' }}>مصروفات مستحقة (التزامات)</div>
-            <div className="text-xl font-black font-mono mt-1 text-amber-400">{formatEGP(unpaidAccruedTotal)}</div>
-          </div>
-        </div>
-
-        <div className="glass-card p-4 flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(0,212,170,0.12)', color: 'var(--clr-accent)' }}>
-            <Clock size={24} />
-          </div>
-          <div>
-            <div className="text-xs font-bold" style={{ color: 'var(--clr-muted)' }}>مصروفات دورية</div>
-            <div className="text-xl font-black font-mono mt-1 text-emerald-400">{recurringCount} بند</div>
-          </div>
-        </div>
-
-        <div className="glass-card p-4 flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(52,211,153,0.12)', color: '#34d399' }}>
-            <Calculator size={24} />
-          </div>
-          <div>
-            <div className="text-xs font-bold" style={{ color: 'var(--clr-muted)' }}>إجمالي الالتزامات الكلية</div>
-            <div className="text-xl font-black font-mono mt-1 text-white">{formatEGP(totalCashExpenses + unpaidAccruedTotal)}</div>
-          </div>
-        </div>
+        <table className="w-full text-center text-xs border-collapse">
+          <thead>
+            <tr className="border-b text-[var(--clr-muted)] font-semibold" style={{ borderColor: 'var(--clr-border)' }}>
+              <th className="py-2.5 px-3">إجمالي المصروفات النقدية</th>
+              <th className="py-2.5 px-3">مصروفات مستحقة (التزامات)</th>
+              <th className="py-2.5 px-3">بند المصروفات الدورية</th>
+              <th className="py-2.5 px-3 font-bold text-white">إجمالي المصروفات الكلية للفترة</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="divide-x divide-x-reverse font-mono font-bold" style={{ borderColor: 'var(--clr-border)' }}>
+              <td className="py-3 px-3 text-base text-red-400">{formatEGP(totalCashExpenses)}</td>
+              <td className="py-3 px-3 text-base text-amber-400">{formatEGP(unpaidAccruedTotal)}</td>
+              <td className="py-3 px-3 text-base text-emerald-400">{recurringCount} بند</td>
+              <td className="py-3 px-3 text-lg text-white font-black">{formatEGP(totalCashExpenses + unpaidAccruedTotal)}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       {/* Tabs & Filters Bar */}
@@ -441,19 +476,59 @@ export default function ExpensesPage() {
             className={`btn-tab ${viewTab === 'accrued' ? 'active' : ''}`}
             onClick={() => setViewTab('accrued')}
           >
-            المصروفات المستحقة ({accruedExpenses.length})
+            المصروفات المستحقة ({filteredAccruedExpenses.length})
           </button>
         </div>
 
         {/* Date & Category Filters */}
         <div className="flex flex-wrap items-center gap-3">
+          {/* Quick Date Filters */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <button
+              type="button"
+              onClick={() => handleQuickFilter('today')}
+              className={`badge px-3 py-1.5 text-xs font-bold cursor-pointer transition-all ${
+                dateFrom === today() && dateTo === today() ? 'badge-primary' : 'badge-muted'
+              }`}
+            >
+              اليوم
+            </button>
+            <button
+              type="button"
+              onClick={() => handleQuickFilter('yesterday')}
+              className={`badge px-3 py-1.5 text-xs font-bold cursor-pointer transition-all ${
+                dateFrom === getYesterdayStr() && dateTo === getYesterdayStr() ? 'badge-primary' : 'badge-muted'
+              }`}
+            >
+              أمس
+            </button>
+            <button
+              type="button"
+              onClick={() => handleQuickFilter('week')}
+              className={`badge px-3 py-1.5 text-xs font-bold cursor-pointer transition-all ${
+                dateFrom === getWeekAgoStr() && dateTo === today() ? 'badge-primary' : 'badge-muted'
+              }`}
+            >
+              آخر 7 أيام
+            </button>
+            <button
+              type="button"
+              onClick={() => handleQuickFilter('month')}
+              className={`badge px-3 py-1.5 text-xs font-bold cursor-pointer transition-all ${
+                dateFrom === monthStart() && dateTo === today() ? 'badge-primary' : 'badge-muted'
+              }`}
+            >
+              هذا الشهر
+            </button>
+          </div>
+
           <div className="flex items-center gap-2 text-xs font-bold" style={{ color: 'var(--clr-muted)' }}>
             <span>من:</span>
-            <input type="date" className="input py-1 px-2 text-xs" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
+            <input type="date" className="input py-1 px-2.5 text-xs font-mono font-bold" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
           </div>
           <div className="flex items-center gap-2 text-xs font-bold" style={{ color: 'var(--clr-muted)' }}>
             <span>إلى:</span>
-            <input type="date" className="input py-1 px-2 text-xs" value={dateTo} onChange={e => setDateTo(e.target.value)} />
+            <input type="date" className="input py-1 px-2.5 text-xs font-mono font-bold" value={dateTo} onChange={e => setDateTo(e.target.value)} />
           </div>
 
           <select
@@ -549,6 +624,17 @@ export default function ExpensesPage() {
                   ))
                 )}
               </tbody>
+              <tfoot>
+                <tr className="border-t font-bold text-sm bg-[var(--clr-surface-2)]" style={{ borderColor: 'var(--clr-border)' }}>
+                  <td colSpan={3} className="py-3 px-3 text-[var(--clr-text)]">
+                    إجمالي المصروفات النقدية للفترة المحددة ({filteredExpenses.length} مصروف):
+                  </td>
+                  <td className="py-3 px-2 font-mono font-black text-base text-red-400">
+                    {formatEGP(totalCashExpenses)}
+                  </td>
+                  <td colSpan={3}></td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         </div>
@@ -572,14 +658,14 @@ export default function ExpensesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
-                {accruedExpenses.length === 0 ? (
+                {filteredAccruedExpenses.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="text-center py-8 text-xs font-bold" style={{ color: 'var(--clr-muted)' }}>
-                      لا يوجد مصروفات مستحقة مسجلة
+                      لا يوجد مصروفات مستحقة مسجلة للفترة المحددة
                     </td>
                   </tr>
                 ) : (
-                  accruedExpenses.map(accr => (
+                  filteredAccruedExpenses.map(accr => (
                     <tr key={accr.id} className="hover:bg-white/5 transition-colors">
                       <td className="py-3 px-2 font-bold">{accr.title}</td>
                       <td className="py-3 px-2 font-mono font-bold text-amber-400">{formatEGP(accr.amount)}</td>
@@ -617,6 +703,17 @@ export default function ExpensesPage() {
                   ))
                 )}
               </tbody>
+              <tfoot>
+                <tr className="border-t font-bold text-sm bg-[var(--clr-surface-2)]" style={{ borderColor: 'var(--clr-border)' }}>
+                  <td className="py-3 px-3 text-[var(--clr-text)]">
+                    إجمالي المصروفات المستحقة للفترة ({filteredAccruedExpenses.length} بند):
+                  </td>
+                  <td className="py-3 px-2 font-mono font-black text-base text-amber-400">
+                    {formatEGP(unpaidAccruedTotal)}
+                  </td>
+                  <td colSpan={5}></td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         </div>
