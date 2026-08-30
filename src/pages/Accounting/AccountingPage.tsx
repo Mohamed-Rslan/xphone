@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import {
   Plus, TrendingUp, TrendingDown, DollarSign, FileSpreadsheet,
   Building2, Users, AlertTriangle, ArrowRightLeft, ShieldCheck,
-  Scale, Calculator, Clock, CheckCircle2, RotateCcw, Box, ArrowDownRight, ArrowUpRight, Eye
+  Scale, Calculator, Clock, CheckCircle2, RotateCcw, Box, ArrowDownRight, ArrowUpRight, Eye, Trash2
 } from 'lucide-react'
 import {
   getExpenses, getExpenseCategories, createExpense, deleteExpense,
@@ -26,7 +26,7 @@ import CashAccountMovementsModal from '../../components/CashAccountMovementsModa
 const COLORS = ['#7c6bff', '#00d4aa', '#ffab3e', '#ff5c7c', '#44e887', '#a78bfa', '#34d399']
 
 export default function AccountingPage() {
-  const [tab, setTab] = useState<'balance_sheet' | 'pl' | 'profit_distribution' | 'ledger' | 'shareholders' | 'shareholders_ledger' | 'fixed_assets' | 'accrued' | 'advances' | 'accounts' | 'sales_detailed' | 'expenses'>('balance_sheet')
+  const [tab, setTab] = useState<'balance_sheet' | 'pl' | 'profit_distribution' | 'ledger' | 'shareholders' | 'shareholders_ledger' | 'fixed_assets' | 'accrued' | 'advances' | 'accounts' | 'sales_detailed' | 'expenses' | 'liabilities'>('balance_sheet')
   
   // Date range filters
   const [dateFrom, setDateFrom] = useState(monthStart())
@@ -211,6 +211,7 @@ export default function AccountingPage() {
         getFinancialAccounts(),
         getFixedAssets(),
         getShareholders(),
+        calculateProfitDistribution(dateFrom, dateTo, profitDistMethod),
         getLiabilities('all'),
         getSalesDetailedMetrics(),
         getExpenses({ date_from: dateFrom, date_to: dateTo }),
@@ -462,68 +463,7 @@ export default function AccountingPage() {
     }
   }
 
-  // Handle Add Accrued Expense
-  const handleCreateAccrued = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const amt = parseFloat(accruedAmount)
-    if (!accruedTitle || !amt) return toast.error('يرجى إدخال عنوان المصروف والمبلغ')
-    try {
-      await createAccruedExpense({
-        title: accruedTitle,
-        amount: amt,
-        category_id: accruedCatId ? parseInt(accruedCatId) : undefined,
-        due_date: accruedDue || undefined,
-        notes: accruedNotes || undefined,
-      })
-      toast.success('تم تسجيل المصروف المستحق بنجاح')
-      setShowAddAccruedModal(false)
-      setAccruedTitle('')
-      setAccruedAmount('')
-      setAccruedNotes('')
-      loadData()
-    } catch (err: any) {
-      toast.error(err.toString())
-    }
-  }
 
-  // Handle Pay Accrued
-  const handlePayAccrued = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!showPayAccruedModal) return
-    try {
-      await payAccruedExpense({
-        id: showPayAccruedModal.id,
-        financial_account_id: payAccruedAcc,
-      })
-      toast.success('تم سداد المصروف المستحق وخصمه من الحساب المالي')
-      setShowPayAccruedModal(null)
-      loadData()
-    } catch (err: any) {
-      toast.error(err.toString())
-    }
-  }
-
-  // Handle Add Customer Advance
-  const handleCreateAdvance = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const amt = parseFloat(advAmount)
-    if (!advCustomerId || !amt) return toast.error('يرجى اختيار العميل والمبلغ')
-    try {
-      await createCustomerAdvance({
-        customer_id: advCustomerId,
-        amount: amt,
-        financial_account_id: advAcc,
-        notes: advNotes || undefined,
-      })
-      toast.success('تم تسجيل الدفعة المقدمة وإضافتها للخزينة')
-      setShowAddAdvanceModal(false)
-      setAdvAmount('')
-      setAdvNotes('')
-      loadData()
-    } catch (err: any) {
-      toast.error(err.toString())
-    }
-  }
 
   // Handle Add Expense
   const handleCreateExpense = async (e: React.FormEvent) => {
