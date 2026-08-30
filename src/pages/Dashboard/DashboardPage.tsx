@@ -4,7 +4,7 @@ import {
   Wrench, ArrowUpRight, Package, Banknote, FileSpreadsheet,
   Wallet, Building2, Scale, Users, Compass
 } from 'lucide-react'
-import { getDashboardStats, getDailySummary } from '../../lib/commands'
+import { getDashboardStats, getDailySummary, getFinancialAccounts, FinancialAccount } from '../../lib/commands'
 import { formatEGP, formatDate, monthStart, today } from '../../lib/utils'
 import { exportPeriodRevenueExpenseReport } from '../../lib/excel'
 import ExportReportModal from '../../components/ExportReportModal'
@@ -28,6 +28,7 @@ interface DashboardPageProps {
 
 export default function DashboardPage({ onNavigate }: DashboardPageProps) {
   const [stats, setStats] = useState<Stats | null>(null)
+  const [accountAlerts, setAccountAlerts] = useState<FinancialAccount[]>([])
   const [chartData, setChartData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showExportModal, setShowExportModal] = useState(false)
@@ -35,9 +36,10 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
   useEffect(() => {
     const load = async () => {
       try {
-        const [s, chart] = await Promise.all([
+        const [s, chart, accs] = await Promise.all([
           getDashboardStats(),
           getDailySummary({ date_from: monthStart(), date_to: today() }),
+          getFinancialAccounts(),
         ])
         setStats(s)
         setChartData(chart.reverse().map((d: any) => ({
@@ -45,6 +47,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
           revenue: d.sales_revenue,
           profit: d.gross_profit,
         })))
+        setAccountAlerts((accs || []).filter((a: any) => a.alert_status && a.alert_status !== 'normal'))
       } catch (e) { console.error(e) }
       finally { setLoading(false) }
     }
@@ -165,6 +168,49 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
           })}
         </div>
       </div>
+
+      {/* Financial Accounts Limits Alert Banner */}
+      {accountAlerts.length > 0 && (
+        <div className="glass-card p-4 border space-y-3" style={{ background: 'rgba(239, 68, 68, 0.08)', borderColor: 'rgba(239, 68, 68, 0.3)' }}>
+          <div className="flex items-center justify-between border-b pb-2" style={{ borderColor: 'rgba(239, 68, 68, 0.2)' }}>
+            <div className="flex items-center gap-2 font-bold text-sm text-red-400">
+              <AlertTriangle size={18} className="animate-pulse" />
+              <span>🚨 تنبيهات ومراقبة ضوابط الحسابات النقدية والمسحوبات:</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => onNavigate?.('accounts')}
+              className="btn-secondary text-xs py-1 px-3 font-bold cursor-pointer text-amber-300 border-amber-500/40"
+            >
+              إدارة الحسابات والسيولة ⚙️
+            </button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {accountAlerts.map(acc => {
+              const isUrgent = acc.alert_status.includes('100') || acc.alert_status.includes('below') || acc.alert_status.includes('above')
+              return (
+                <div key={acc.id} className="p-3 rounded-xl bg-black/40 border border-red-500/20 text-xs flex flex-col gap-1.5 justify-between">
+                  <div className="flex items-center justify-between font-bold">
+                    <span className="text-white text-sm">{acc.name_ar}</span>
+                    <span className={`badge text-[10px] ${isUrgent ? 'badge-danger animate-pulse' : 'badge-warning'}`}>
+                      {isUrgent ? '🚨 تنبيه مشدد' : '⚠️ تحذير'}
+                    </span>
+                  </div>
+                  <p className="text-[var(--clr-muted)] text-[11px] leading-relaxed">
+                    {acc.alert_message}
+                  </p>
+                  {acc.limit_type === 'debit_limit' && (
+                    <div className="flex justify-between items-center text-[10px] font-mono text-amber-300 border-t pt-1" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+                      <span>المدينة الخارجة للفترة: {formatEGP(acc.current_period_debit || 0)}</span>
+                      <span>المتبقي بالشهر الحالي: {acc.days_remaining_in_period ?? 0} يوم</span>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-4 gap-4">

@@ -1645,8 +1645,11 @@ pub struct FinancialAccount {
     pub max_balance_limit: Option<f64>,
     pub debit_limit_amount: Option<f64>,
     pub debit_limit_days: Option<i32>,
+    pub debit_limit_start_date: Option<String>,
+    pub debit_limit_end_date: Option<String>,
     pub warning_threshold_pct: f64,
     pub current_period_debit: f64,
+    pub days_remaining_in_period: i32,
     pub alert_status: String, // "normal", "warning_75", "exceeded_100", "below_min", "above_max", "near_min", "near_max"
     pub alert_message: String,
     pub monthly_inflow: f64,
@@ -1663,6 +1666,8 @@ pub struct CreateAccountPayload {
     pub max_balance_limit: Option<f64>,
     pub debit_limit_amount: Option<f64>,
     pub debit_limit_days: Option<i32>,
+    pub debit_limit_start_date: Option<String>,
+    pub debit_limit_end_date: Option<String>,
     pub warning_threshold_pct: Option<f64>,
 }
 
@@ -1674,6 +1679,8 @@ pub struct UpdateAccountLimitsPayload {
     pub max_balance_limit: Option<f64>,
     pub debit_limit_amount: Option<f64>,
     pub debit_limit_days: Option<i32>,
+    pub debit_limit_start_date: Option<String>,
+    pub debit_limit_end_date: Option<String>,
     pub warning_threshold_pct: Option<f64>,
 }
 
@@ -1686,51 +1693,72 @@ pub struct AccountAlert {
     pub message: String,
 }
 
-pub fn get_period_debit_outflow_for_account(conn: &rusqlite::Connection, account_id: &str, days: i32) -> f64 {
-    let days_val = days.max(1);
-    let days_param = format!("-{} days", days_val);
+pub fn get_current_month_range() -> (String, String, i32) {
+    use chrono::Datelike;
+    let now = chrono::Local::now().date_naive();
+    let year = now.year();
+    let month = now.month();
 
+    let start_date = chrono::NaiveDate::from_ymd_opt(year, month, 1).unwrap_or(now);
+    let next_month_start = if month == 12 {
+        chrono::NaiveDate::from_ymd_opt(year + 1, 1, 1).unwrap_or(now)
+    } else {
+        chrono::NaiveDate::from_ymd_opt(year, month + 1, 1).unwrap_or(now)
+    };
+    let end_date = next_month_start.pred_opt().unwrap_or(now);
+
+    let days_remaining = (end_date - now).num_days().max(0) as i32;
+
+    (start_date.to_string(), end_date.to_string(), days_remaining)
+}
+
+pub fn get_period_debit_outflow_for_account(
+    conn: &rusqlite::Connection,
+    account_id: &str,
+    start_date: &str,
+    end_date: &str,
+) -> f64 {
     let exp_out: f64 = conn.query_row(
-        "SELECT COALESCE(SUM(amount), 0.0) FROM expenses WHERE financial_account_id = ?1 AND date(expense_date) >= date('now', ?2)",
-        rusqlite::params![account_id, days_param],
+        "SELECT COALESCE(SUM(amount), 0.0) FROM expenses WHERE financial_account_id = ?1 AND date(expense_date) >= ?2 AND date(expense_date) <= ?3",
+        rusqlite::params![account_id, start_date, end_date],
         |r| r.get(0)
     ).unwrap_or(0.0);
 
     let accr_out: f64 = conn.query_row(
-        "SELECT COALESCE(SUM(amount), 0.0) FROM accrued_expenses WHERE status = 'paid' AND financial_account_id = ?1 AND date(created_at) >= date('now', ?2)",
-        rusqlite::params![account_id, days_param],
+        "SELECT COALESCE(SUM(amount), 0.0) FROM accrued_expenses WHERE status = 'paid' AND financial_account_id = ?1 AND date(created_at) >= ?2 AND date(created_at) <= ?3",
+        rusqlite::params![account_id, start_date, end_date],
         |r| r.get(0)
     ).unwrap_or(0.0);
 
     let mon_out: f64 = if account_id == "cash_drawer" {
         conn.query_row(
-            "SELECT COALESCE(SUM(amount), 0.0) FROM monetary_transactions WHERE tx_type = 'transfer_in_cash_out' AND date(created_at) >= date('now', ?1)",
-            rusqlite::params![days_param],
+            "SELECT COALESCE(SUM(amount), 0.0) FROM monetary_transactions WHERE tx_type = 'transfer_in_cash_out' AND date(created_at) >= ?1 AND date(created_at) <= ?2",
+            rusqlite::params![start_date, end_date],
             |r| r.get(0)
         ).unwrap_or(0.0)
     } else {
         conn.query_row(
-            "SELECT COALESCE(SUM(amount), 0.0) FROM monetary_transactions WHERE tx_type = 'cash_in_transfer_out' AND financial_account_id = ?1 AND date(created_at) >= date('now', ?2)",
-            rusqlite::params![account_id, days_param],
+            "SELECT COALESCE(SUM(amount), 0.0) FROM monetary_transactions WHERE tx_type = 'cash_in_transfer_out' AND financial_account_id = ?1 AND date(created_at) >= ?2 AND date(created_at) <= ?3",
+            rusqlite::params![account_id, start_date, end_date],
             |r| r.get(0)
         ).unwrap_or(0.0)
     };
 
     let supp_out: f64 = conn.query_row(
-        "SELECT COALESCE(SUM(amount), 0.0) FROM supplier_payments WHERE financial_account_id = ?1 AND date(created_at) >= date('now', ?2)",
-        rusqlite::params![account_id, days_param],
+        "SELECT COALESCE(SUM(amount), 0.0) FROM supplier_payments WHERE financial_account_id = ?1 AND date(created_at) >= ?2 AND date(created_at) <= ?3",
+        rusqlite::params![account_id, start_date, end_date],
         |r| r.get(0)
     ).unwrap_or(0.0);
 
     let trans_out: f64 = conn.query_row(
-        "SELECT COALESCE(SUM(amount), 0.0) FROM financial_transfers WHERE from_account_id = ?1 AND date(created_at) >= date('now', ?2)",
-        rusqlite::params![account_id, days_param],
+        "SELECT COALESCE(SUM(amount), 0.0) FROM financial_transfers WHERE from_account_id = ?1 AND date(created_at) >= ?2 AND date(created_at) <= ?3",
+        rusqlite::params![account_id, start_date, end_date],
         |r| r.get(0)
     ).unwrap_or(0.0);
 
     let eq_out: f64 = conn.query_row(
-        "SELECT COALESCE(SUM(amount), 0.0) FROM equity_transactions WHERE tx_type IN ('withdrawal','profit_distribution','short_term_withdrawal') AND counterpart_type='cash' AND financial_account_id = ?1 AND date(tx_date) >= date('now', ?2)",
-        rusqlite::params![account_id, days_param],
+        "SELECT COALESCE(SUM(amount), 0.0) FROM equity_transactions WHERE tx_type IN ('withdrawal','profit_distribution','short_term_withdrawal') AND counterpart_type='cash' AND financial_account_id = ?1 AND date(tx_date) >= ?2 AND date(tx_date) <= ?3",
+        rusqlite::params![account_id, start_date, end_date],
         |r| r.get(0)
     ).unwrap_or(0.0);
 
@@ -1975,7 +2003,8 @@ pub async fn get_financial_accounts(
     let conn = state.pool.get()?;
     let mut stmt = conn.prepare(
         "SELECT id, name_ar, name_en, is_active, created_at, min_balance_limit, max_balance_limit,
-                COALESCE(limit_type, 'min_max'), debit_limit_amount, COALESCE(debit_limit_days, 30), COALESCE(warning_threshold_pct, 75.0)
+                COALESCE(limit_type, 'min_max'), debit_limit_amount, COALESCE(debit_limit_days, 30),
+                COALESCE(warning_threshold_pct, 75.0), debit_limit_start_date, debit_limit_end_date
          FROM financial_accounts ORDER BY created_at ASC"
     )?;
     let accounts_iter = stmt.query_map([], |r| {
@@ -1991,15 +2020,29 @@ pub async fn get_financial_accounts(
             r.get::<_, Option<f64>>(8)?,
             r.get::<_, i32>(9)?,
             r.get::<_, f64>(10)?,
+            r.get::<_, Option<String>>(11)?,
+            r.get::<_, Option<String>>(12)?,
         ))
     })?;
 
     let mut list = Vec::new();
     for item in accounts_iter {
-        let (id, name_ar, name_en, is_active, created_at, min_limit, max_limit, limit_type, debit_limit_amount, debit_limit_days, warning_threshold_pct) = item?;
+        let (id, name_ar, name_en, is_active, created_at, min_limit, max_limit, limit_type, debit_limit_amount, debit_limit_days, warning_threshold_pct, start_date_opt, end_date_opt) = item?;
         let balance = calculate_account_balance(&conn, &id)?;
         let (monthly_inflow, monthly_outflow) = get_monthly_cashflow_for_account(&conn, &id);
-        let current_period_debit = get_period_debit_outflow_for_account(&conn, &id, debit_limit_days);
+
+        let (default_start, default_end, default_days_rem) = get_current_month_range();
+        let eff_start_date = start_date_opt.clone().unwrap_or(default_start);
+        let eff_end_date = end_date_opt.clone().unwrap_or(default_end);
+
+        let days_remaining_in_period = if let Ok(end_nd) = chrono::NaiveDate::parse_from_str(&eff_end_date, "%Y-%m-%d") {
+            let now_nd = chrono::Local::now().date_naive();
+            (end_nd - now_nd).num_days().max(0) as i32
+        } else {
+            default_days_rem
+        };
+
+        let current_period_debit = get_period_debit_outflow_for_account(&conn, &id, &eff_start_date, &eff_end_date);
 
         let mut alert_status = "normal".to_string();
         let mut alert_message = "الحساب يعمل بصورة طبيعية ضمن الحدود المقررة".to_string();
@@ -2010,11 +2053,11 @@ pub async fn get_financial_accounts(
                     let pct = (current_period_debit / debit_max) * 100.0;
                     if pct >= 100.0 {
                         alert_status = "exceeded_100".to_string();
-                        alert_message = format!("🚨 تنبيه مشدد عاجل: تجاوز إجمالي الحركات المدينة الخارجة الحد الأقصى المسموح ({:.1}%) للمدة ({} يوم)!", pct, debit_limit_days);
+                        alert_message = format!("🚨 تنبيه مشدد عاجل: تجاوز إجمالي الحركات المدينة الخارجة الحد الأقصى المسموح ({:.1}%) للفترة (متبقي {} يوم بالشهر)! ", pct, days_remaining_in_period);
                         let _ = crate::commands::notifications::log_system_notification(
                             &conn, None, "نظام التنبيهات والحدود", "debit_limit_exceeded",
                             &format!("🚨 تجاوز الحد الأقصى للمسحوبات ({})", name_ar),
-                            Some(&format!("بلغت الحركات المدينة الخارجة {:.2} ج.م بنسبة {:.1}% من الحد الأقصى ({} يوم)", current_period_debit, pct, debit_limit_days))
+                            Some(&format!("بلغت الحركات المدينة الخارجة {:.2} ج.م بنسبة {:.1}% من الحد الأقصى للفترة (متبقي {} يوم)", current_period_debit, pct, days_remaining_in_period))
                         );
                     } else if pct >= warning_threshold_pct {
                         alert_status = "warning_75".to_string();
@@ -2054,7 +2097,9 @@ pub async fn get_financial_accounts(
             id, name_ar, name_en, is_active, created_at, balance,
             limit_type, min_balance_limit: min_limit, max_balance_limit: max_limit,
             debit_limit_amount, debit_limit_days: Some(debit_limit_days),
-            warning_threshold_pct, current_period_debit,
+            debit_limit_start_date: start_date_opt,
+            debit_limit_end_date: end_date_opt,
+            warning_threshold_pct, current_period_debit, days_remaining_in_period,
             alert_status, alert_message,
             monthly_inflow, monthly_outflow,
             net_monthly_flow: monthly_inflow - monthly_outflow,
@@ -2077,13 +2122,16 @@ pub async fn create_financial_account(
     let warning_pct = payload.warning_threshold_pct.unwrap_or(75.0);
 
     conn.execute(
-        "INSERT INTO financial_accounts (id, name_ar, name_en, is_active, min_balance_limit, max_balance_limit, limit_type, debit_limit_amount, debit_limit_days, warning_threshold_pct, created_at)
-         VALUES (?1, ?2, ?3, 1, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+        "INSERT INTO financial_accounts (id, name_ar, name_en, is_active, min_balance_limit, max_balance_limit, limit_type, debit_limit_amount, debit_limit_days, warning_threshold_pct, debit_limit_start_date, debit_limit_end_date, created_at)
+         VALUES (?1, ?2, ?3, 1, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
         rusqlite::params![
             id, payload.name_ar, payload.name_en, payload.min_balance_limit, payload.max_balance_limit,
-            limit_type, payload.debit_limit_amount, debit_days, warning_pct, now
+            limit_type, payload.debit_limit_amount, debit_days, warning_pct,
+            payload.debit_limit_start_date, payload.debit_limit_end_date, now
         ],
     )?;
+
+    let (def_s, def_e, def_rem) = get_current_month_range();
 
     Ok(FinancialAccount {
         id, name_ar: payload.name_ar, name_en: payload.name_en, is_active: true,
@@ -2092,8 +2140,11 @@ pub async fn create_financial_account(
         max_balance_limit: payload.max_balance_limit,
         debit_limit_amount: payload.debit_limit_amount,
         debit_limit_days: Some(debit_days),
+        debit_limit_start_date: payload.debit_limit_start_date,
+        debit_limit_end_date: payload.debit_limit_end_date,
         warning_threshold_pct: warning_pct,
         current_period_debit: 0.0,
+        days_remaining_in_period: def_rem,
         alert_status: "normal".to_string(),
         alert_message: "الحساب يعمل بصورة طبيعية".to_string(),
         monthly_inflow: 0.0, monthly_outflow: 0.0, net_monthly_flow: 0.0,
@@ -2111,10 +2162,11 @@ pub async fn update_financial_account_limits(
     let warning_pct = payload.warning_threshold_pct.unwrap_or(75.0);
 
     conn.execute(
-        "UPDATE financial_accounts SET limit_type=?1, min_balance_limit=?2, max_balance_limit=?3, debit_limit_amount=?4, debit_limit_days=?5, warning_threshold_pct=?6 WHERE id=?7",
+        "UPDATE financial_accounts SET limit_type=?1, min_balance_limit=?2, max_balance_limit=?3, debit_limit_amount=?4, debit_limit_days=?5, warning_threshold_pct=?6, debit_limit_start_date=?7, debit_limit_end_date=?8 WHERE id=?9",
         rusqlite::params![
             limit_type, payload.min_balance_limit, payload.max_balance_limit,
-            payload.debit_limit_amount, debit_days, warning_pct, payload.id
+            payload.debit_limit_amount, debit_days, warning_pct,
+            payload.debit_limit_start_date, payload.debit_limit_end_date, payload.id
         ],
     )?;
     Ok(())

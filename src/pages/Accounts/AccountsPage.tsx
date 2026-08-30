@@ -44,6 +44,8 @@ export default function AccountsPage() {
   const [limitMax, setLimitMax] = useState('')
   const [debitLimitAmount, setDebitLimitAmount] = useState('')
   const [debitLimitDays, setDebitLimitDays] = useState('30')
+  const [debitLimitStartDate, setDebitLimitStartDate] = useState('')
+  const [debitLimitEndDate, setDebitLimitEndDate] = useState('')
   const [warningThresholdPct, setWarningThresholdPct] = useState('75')
   const [savingLimit, setSavingLimit] = useState(false)
 
@@ -132,6 +134,8 @@ export default function AccountsPage() {
         max_balance_limit: limitMax ? parseFloat(limitMax) : null,
         debit_limit_amount: debitLimitAmount ? parseFloat(debitLimitAmount) : null,
         debit_limit_days: debitLimitDays ? parseInt(debitLimitDays) : 30,
+        debit_limit_start_date: debitLimitStartDate.trim() || null,
+        debit_limit_end_date: debitLimitEndDate.trim() || null,
         warning_threshold_pct: warningThresholdPct ? parseFloat(warningThresholdPct) : 75.0,
       })
       toast.success('تم تحديث ضوابط وحدود الحساب النقدي بنجاح!', { id: t })
@@ -234,6 +238,8 @@ export default function AccountsPage() {
     setLimitMax(acc.max_balance_limit != null ? acc.max_balance_limit.toString() : '')
     setDebitLimitAmount(acc.debit_limit_amount != null ? acc.debit_limit_amount.toString() : '')
     setDebitLimitDays(acc.debit_limit_days != null ? acc.debit_limit_days.toString() : '30')
+    setDebitLimitStartDate(acc.debit_limit_start_date || '')
+    setDebitLimitEndDate(acc.debit_limit_end_date || '')
     setWarningThresholdPct(acc.warning_threshold_pct != null ? acc.warning_threshold_pct.toString() : '75')
   }
 
@@ -514,13 +520,19 @@ export default function AccountsPage() {
                           </span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-[var(--clr-muted)]">المدفوعات للفترة ({acc.debit_limit_days || 30} يوم):</span>
+                          <span className="text-[var(--clr-muted)]">المدفوعات الفعلية للفترة:</span>
                           <span className="font-mono font-bold text-amber-400">
                             {formatEGP(acc.current_period_debit || 0)}
                           </span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-[var(--clr-muted)]">نسبة التنبيه المقرر:</span>
+                          <span className="text-[var(--clr-muted)]">المتبقي بالشهر الحالي:</span>
+                          <span className="font-mono font-bold text-cyan-400">
+                            {acc.days_remaining_in_period ?? 0} يوم
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-[var(--clr-muted)]">نسبة حد التنبيه الإشعاري:</span>
                           <span className="font-mono font-bold text-emerald-400">
                             {acc.warning_threshold_pct || 75}%
                           </span>
@@ -851,15 +863,35 @@ export default function AccountsPage() {
                       يشمل المصروفات والسحوبات وسداد الموردين والتحويلات الخارجة من الحساب.
                     </span>
                   </div>
+
                   <div>
-                    <label className="label font-bold text-xs">المدة الزمنية (بالأيام):</label>
+                    <label className="label font-bold text-xs">تاريخ بداية الفترة المخصصة:</label>
                     <input
-                      type="number"
-                      className="input w-full font-mono font-bold"
-                      value={debitLimitDays}
-                      onChange={e => setDebitLimitDays(e.target.value)}
-                      placeholder="30 يوم (شهر كامل)"
+                      type="date"
+                      className="input w-full font-mono text-xs"
+                      value={debitLimitStartDate}
+                      onChange={e => setDebitLimitStartDate(e.target.value)}
                     />
+                    <span className="text-[10px] text-[var(--clr-muted)] mt-0.5 block">
+                      اتركه فارغاً للاحتساب من 01 بالشهر الحالي.
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="label font-bold text-xs">تاريخ نهاية الفترة المخصصة:</label>
+                    <input
+                      type="date"
+                      className="input w-full font-mono text-xs"
+                      value={debitLimitEndDate}
+                      onChange={e => setDebitLimitEndDate(e.target.value)}
+                    />
+                    <span className="text-[10px] text-[var(--clr-muted)] mt-0.5 block">
+                      اتركه فارغاً للاحتساب لنهاية الشهر الحالي.
+                    </span>
+                  </div>
+
+                  <div className="col-span-2 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-300">
+                    💡 <b>المدفوعات التلقائية للشهر:</b> عند ترك التواريخ فارغة، يتم احتساب المسحوبات من 1 بالشهر إلى آخره حسب عدد أيامه مع حساب عدد الأيام المتبقية للشهر (حسب تاريخ اليوم).
                   </div>
                 </div>
               )}

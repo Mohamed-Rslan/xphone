@@ -161,8 +161,11 @@ export interface FinancialAccount {
   max_balance_limit?: number | null
   debit_limit_amount?: number | null
   debit_limit_days?: number | null
+  debit_limit_start_date?: string | null
+  debit_limit_end_date?: string | null
   warning_threshold_pct?: number
   current_period_debit?: number
+  days_remaining_in_period?: number
   alert_status: string
   alert_message?: string
   monthly_inflow: number
