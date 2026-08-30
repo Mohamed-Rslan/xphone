@@ -292,40 +292,40 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
 
       {/* Master Configured Rules & Active Dashboard Alerts Banner */}
       {dashboardAlerts.length > 0 && (
-        <div className="glass-card p-5 border space-y-4 rounded-2xl shadow-xl" style={{ background: 'var(--clr-surface)', borderColor: 'var(--clr-border-2)' }}>
-          <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: 'var(--clr-border)' }}>
-            <div className="flex items-center gap-2.5 font-black text-base text-[var(--clr-text)]">
-              <BellRing size={22} className="text-amber-500 animate-pulse shrink-0" />
+        <div className="glass-card p-3.5 border space-y-2.5 rounded-xl shadow-md" style={{ background: 'var(--clr-surface)', borderColor: 'var(--clr-border-2)' }}>
+          <div className="flex items-center justify-between border-b pb-2" style={{ borderColor: 'var(--clr-border)' }}>
+            <div className="flex items-center gap-2 font-bold text-xs text-[var(--clr-text)]">
+              <BellRing size={16} className="text-amber-500 animate-pulse shrink-0" />
               <span>مركز التنبيهات النشطة والتنبيهات المحددة في الإعدادات ({dashboardAlerts.length})</span>
             </div>
-            <span className="text-xs text-[var(--clr-text-2)] font-bold bg-[var(--clr-surface-2)] px-3 py-1 rounded-lg border border-[var(--clr-border)]">
+            <span className="text-[10px] text-[var(--clr-text-2)] font-bold bg-[var(--clr-surface-2)] px-2.5 py-0.5 rounded-md border border-[var(--clr-border)]">
               مرتبة حسب الأولوية ودرجة الخطورة
             </span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
             {dashboardAlerts.map(alert => {
               let isHigh = alert.severity === 'high'
               let isMed = alert.severity === 'medium'
 
-              // High-Contrast Theme Adaptive Styling
+              // Compact High-Contrast Theme Adaptive Styling
               let cardBg = isHigh
-                ? 'bg-red-500/15 border-red-500/70 shadow-md'
+                ? 'bg-red-500/10 border-red-500/60 shadow-sm'
                 : isMed
-                ? 'bg-amber-500/15 border-amber-500/70 shadow-md'
-                : 'bg-emerald-500/15 border-emerald-500/70 shadow-md'
+                ? 'bg-amber-500/10 border-amber-500/60 shadow-sm'
+                : 'bg-emerald-500/10 border-emerald-500/60 shadow-sm'
 
               let titleColor = isHigh
-                ? 'text-red-500 font-black'
+                ? 'text-red-500 font-bold'
                 : isMed
-                ? 'text-amber-500 font-black'
-                : 'text-emerald-500 font-black'
+                ? 'text-amber-500 font-bold'
+                : 'text-emerald-500 font-bold'
 
               let badgeClr = isHigh
-                ? 'bg-red-600 text-white font-black animate-pulse shadow-md'
+                ? 'bg-red-600 text-white font-bold animate-pulse shadow-sm'
                 : isMed
-                ? 'bg-amber-600 text-white font-black shadow-md'
-                : 'bg-emerald-600 text-white font-black shadow-md'
+                ? 'bg-amber-600 text-white font-bold shadow-sm'
+                : 'bg-emerald-600 text-white font-bold shadow-sm'
 
               let badgeText = isHigh ? '🚨 تنبيه مشدد' : isMed ? '🟡 تنبيه متوسط' : '🟢 تنبيه عادي'
               let linkColor = isHigh ? 'text-red-500' : isMed ? 'text-amber-500' : 'text-emerald-500'
@@ -334,20 +334,20 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
                 <div
                   key={alert.id}
                   onClick={() => alert.page !== 'dashboard' && onNavigate?.(alert.page)}
-                  className={`p-4 rounded-xl border flex flex-col justify-between gap-3 transition-all cursor-pointer hover:scale-[1.02] ${cardBg}`}
+                  className={`p-2.5 rounded-lg border flex flex-col justify-between gap-1.5 transition-all cursor-pointer hover:scale-[1.015] ${cardBg}`}
                 >
                   <div>
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <span className={`text-sm leading-snug ${titleColor}`}>{alert.title}</span>
-                      <span className={`badge text-xs py-1 px-2.5 shrink-0 ${badgeClr}`}>
+                    <div className="flex items-start justify-between gap-1.5 mb-1">
+                      <span className={`text-xs leading-tight ${titleColor}`}>{alert.title}</span>
+                      <span className={`badge text-[9px] py-0.5 px-1.5 shrink-0 ${badgeClr}`}>
                         {badgeText}
                       </span>
                     </div>
-                    <p className="text-xs font-bold text-[var(--clr-text)] leading-relaxed bg-[var(--clr-surface-2)] p-2.5 rounded-lg border border-[var(--clr-border)] my-1">
+                    <p className="text-[11px] font-semibold text-[var(--clr-text)] leading-snug bg-[var(--clr-surface-2)] p-2 rounded border border-[var(--clr-border)] my-0.5">
                       {alert.description}
                     </p>
                   </div>
-                  <div className="flex items-center justify-between border-t pt-2 mt-1 text-xs font-black" style={{ borderColor: 'var(--clr-border)' }}>
+                  <div className="flex items-center justify-between border-t pt-1 mt-0.5 text-[10px] font-bold" style={{ borderColor: 'var(--clr-border)' }}>
                     <span className="text-[var(--clr-primary)]">{alert.category}</span>
                     <span className={`${linkColor} hover:underline flex items-center gap-1 font-bold`}>
                       اضغط للانتقال ➔
