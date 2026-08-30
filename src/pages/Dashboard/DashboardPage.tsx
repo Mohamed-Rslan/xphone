@@ -171,38 +171,38 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
 
       {/* Financial Accounts Limits Alert Banner */}
       {accountAlerts.length > 0 && (
-        <div className="glass-card p-4 border space-y-3" style={{ background: 'rgba(239, 68, 68, 0.08)', borderColor: 'rgba(239, 68, 68, 0.3)' }}>
-          <div className="flex items-center justify-between border-b pb-2" style={{ borderColor: 'rgba(239, 68, 68, 0.2)' }}>
-            <div className="flex items-center gap-2 font-bold text-sm text-red-400">
-              <AlertTriangle size={18} className="animate-pulse" />
-              <span>🚨 تنبيهات ومراقبة ضوابط الحسابات النقدية والمسحوبات:</span>
+        <div className="glass-card p-3 border space-y-2 rounded-xl" style={{ background: 'rgba(239, 68, 68, 0.06)', borderColor: 'rgba(239, 68, 68, 0.25)' }}>
+          <div className="flex items-center justify-between border-b pb-1.5" style={{ borderColor: 'rgba(239, 68, 68, 0.15)' }}>
+            <div className="flex items-center gap-1.5 font-bold text-xs text-red-400">
+              <AlertTriangle size={15} className="animate-pulse" />
+              <span>🚨 تنبيهات ضوابط الحسابات النقدية:</span>
             </div>
             <button
               type="button"
               onClick={() => onNavigate?.('accounts')}
-              className="btn-secondary text-xs py-1 px-3 font-bold cursor-pointer text-amber-300 border-amber-500/40"
+              className="btn-secondary text-[11px] py-0.5 px-2.5 font-bold cursor-pointer text-amber-300 border-amber-500/30"
             >
-              إدارة الحسابات والسيولة ⚙️
+              إدارة السيولة ⚙️
             </button>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             {accountAlerts.map(acc => {
               const isUrgent = acc.alert_status.includes('100') || acc.alert_status.includes('below') || acc.alert_status.includes('above')
               return (
-                <div key={acc.id} className="p-3 rounded-xl bg-black/40 border border-red-500/20 text-xs flex flex-col gap-1.5 justify-between">
+                <div key={acc.id} className="p-2 rounded-lg bg-black/40 border border-red-500/20 text-[11px] flex flex-col gap-1 justify-between">
                   <div className="flex items-center justify-between font-bold">
-                    <span className="text-white text-sm">{acc.name_ar}</span>
-                    <span className={`badge text-[10px] ${isUrgent ? 'badge-danger animate-pulse' : 'badge-warning'}`}>
+                    <span className="text-white text-xs">{acc.name_ar}</span>
+                    <span className={`badge text-[9px] py-0.5 px-1.5 ${isUrgent ? 'badge-danger animate-pulse' : 'badge-warning'}`}>
                       {isUrgent ? '🚨 تنبيه مشدد' : '⚠️ تحذير'}
                     </span>
                   </div>
-                  <p className="text-[var(--clr-muted)] text-[11px] leading-relaxed">
+                  <p className="text-[var(--clr-muted)] text-[10px] leading-tight">
                     {acc.alert_message}
                   </p>
                   {acc.limit_type === 'debit_limit' && (
-                    <div className="flex justify-between items-center text-[10px] font-mono text-amber-300 border-t pt-1" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
-                      <span>المدينة الخارجة للفترة: {formatEGP(acc.current_period_debit || 0)}</span>
-                      <span>المتبقي بالشهر الحالي: {acc.days_remaining_in_period ?? 0} يوم</span>
+                    <div className="flex justify-between items-center text-[10px] font-mono text-amber-300 border-t pt-0.5" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+                      <span>الخارجة للفترة: {formatEGP(acc.current_period_debit || 0)}</span>
+                      <span>متبقي بالشهر: {acc.days_remaining_in_period ?? 0} يوم</span>
                     </div>
                   )}
                 </div>

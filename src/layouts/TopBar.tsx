@@ -334,7 +334,7 @@ export default function TopBar({ scale, setScale, onMenuToggle }: TopBarProps) {
 
             {showNotifsMenu && (
               <div
-                className="absolute left-0 mt-2 w-80 md:w-96 glass-card p-3 rounded-2xl shadow-2xl z-50 border animate-slide-up"
+                className="absolute left-0 mt-2 w-[350px] sm:w-[440px] md:w-[500px] glass-card p-3.5 rounded-2xl shadow-2xl z-50 border animate-slide-up"
                 style={{
                   borderColor: 'var(--clr-border-2)',
                   background: 'var(--glass-bg)',
@@ -343,8 +343,8 @@ export default function TopBar({ scale, setScale, onMenuToggle }: TopBarProps) {
               >
                 <div className="flex items-center justify-between pb-2 border-b mb-2" style={{ borderColor: 'var(--clr-border)' }}>
                   <div className="flex items-center gap-1.5 font-bold text-xs text-[var(--clr-text)]">
-                    <Bell size={14} className="text-amber-400" />
-                    <span>إشعارات العمليات الحساسة</span>
+                    <Bell size={15} className="text-amber-400" />
+                    <span>إشعارات العمليات الحساسة والحدود المالية</span>
                     {unreadNotifsCount > 0 && (
                       <span className="badge badge-warning text-[10px] font-mono py-0 px-1.5">{unreadNotifsCount} جديد</span>
                     )}
@@ -360,47 +360,47 @@ export default function TopBar({ scale, setScale, onMenuToggle }: TopBarProps) {
                   )}
                 </div>
 
-                <div className="flex flex-col gap-2 max-h-80 overflow-y-auto p-0.5">
+                <div className="flex flex-col gap-2.5 max-h-[420px] overflow-y-auto p-1">
                   {notifications.map((notif) => {
                     let Icon = Bell
-                    let iconColor = 'text-amber-400 bg-amber-500/10'
+                    let iconColor = 'text-amber-400 bg-amber-500/10 border-amber-500/20'
                     if (notif.action_type === 'sales_return') {
                       Icon = Sparkles
-                      iconColor = 'text-red-400 bg-red-500/10'
+                      iconColor = 'text-red-400 bg-red-500/10 border-red-500/20'
                     } else if (notif.action_type === 'purchases_create') {
                       Icon = Bell
-                      iconColor = 'text-emerald-400 bg-emerald-500/10'
-                    } else if (notif.action_type === 'inventory_damaged') {
+                      iconColor = 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+                    } else if (notif.action_type === 'inventory_damaged' || notif.action_type?.includes('debit_limit')) {
                       Icon = AlertTriangle
-                      iconColor = 'text-red-400 bg-red-500/10'
+                      iconColor = 'text-red-400 bg-red-500/10 border-red-500/20'
                     } else if (notif.action_type === 'equity_edit') {
                       Icon = User
-                      iconColor = 'text-purple-400 bg-purple-500/10'
+                      iconColor = 'text-purple-400 bg-purple-500/10 border-purple-500/20'
                     }
 
                     return (
                       <div
                         key={notif.id}
-                        className={`p-2.5 rounded-xl border transition-colors flex items-start gap-2.5 ${
+                        className={`p-3 rounded-xl border transition-all flex items-start gap-3 ${
                           !notif.is_read
                             ? 'bg-[var(--clr-surface-2)] border-amber-500/40 shadow-sm'
-                            : 'bg-[var(--clr-surface-3)] border-[var(--clr-border)] opacity-80'
+                            : 'bg-[var(--clr-surface-3)] border-[var(--clr-border)] opacity-85'
                         }`}
                       >
-                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${iconColor}`}>
-                          <Icon size={14} />
+                        <div className={`w-8 h-8 rounded-xl border flex items-center justify-center shrink-0 mt-0.5 ${iconColor}`}>
+                          <Icon size={16} />
                         </div>
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between gap-1">
-                            <span className="font-bold text-xs text-[var(--clr-text)] line-clamp-1">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-2 mb-1">
+                            <span className="font-bold text-xs text-[var(--clr-text)] leading-snug break-words flex-1">
                               {notif.title}
                             </span>
-                            <span className="text-[10px] text-[var(--clr-muted)] whitespace-nowrap">
+                            <span className="text-[10px] text-[var(--clr-muted)] whitespace-nowrap shrink-0 font-mono">
                               {formatTime(notif.created_at)}
                             </span>
                           </div>
                           {notif.details && (
-                            <p className="text-[11px] text-[var(--clr-muted)] mt-0.5 leading-snug">
+                            <p className="text-[11px] text-[var(--clr-text-2)] leading-relaxed break-words bg-black/20 p-2 rounded-lg border border-white/5 my-1">
                               {notif.details}
                             </p>
                           )}
