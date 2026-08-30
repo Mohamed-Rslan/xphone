@@ -25,7 +25,7 @@ interface TopBarProps {
 }
 
 export default function TopBar({ scale, setScale, onMenuToggle }: TopBarProps) {
-  const { user, sessionId, logout } = useAuthStore()
+  const { user, sessionId, logout, hasPermission } = useAuthStore()
   const { currentTheme, setTheme, toggleDayNight } = useThemeStore()
   const { storeLogo, storeName, loadSettings } = useSettingsStore()
   const [time, setTime] = useState(new Date())
@@ -44,14 +44,46 @@ export default function TopBar({ scale, setScale, onMenuToggle }: TopBarProps) {
     loadSettings().catch(console.error)
   }, [])
 
+  const isNotificationAllowed = (notif: SystemNotification) => {
+    if (!user) return false
+    if (user.role === 'admin') return true
+
+    const type = notif.action_type || ''
+    if (type === 'sales_return' || type === 'sales_create') {
+      return hasPermission('view_pos') || hasPermission('view_sales') || hasPermission('sales_returns') || hasPermission('view_reports')
+    }
+    if (type === 'purchases_create' || type === 'purchases_edit') {
+      return hasPermission('view_purchases') || hasPermission('manage_purchases') || hasPermission('view_suppliers')
+    }
+    if (type === 'inventory_edit' || type === 'inventory_damaged') {
+      return hasPermission('view_inventory') || hasPermission('manage_inventory') || hasPermission('record_damaged')
+    }
+    if (type === 'equity_edit' || type === 'equity_withdraw') {
+      return hasPermission('view_equity') || hasPermission('manage_equity') || hasPermission('view_accounting')
+    }
+    if (type.includes('limit') || type.includes('account')) {
+      return hasPermission('view_accounts') || hasPermission('manage_accounts') || hasPermission('view_liquidity')
+    }
+    if (type === 'broadcast') {
+      return true
+    }
+
+    return hasPermission('view_reports') || hasPermission('view_accounting')
+  }
+
   const fetchNotifications = async () => {
     try {
       const [list, broadcasts] = await Promise.all([
         getSystemNotifications(50, false),
         getBroadcastNotifications(true),
       ])
-      setNotifications(list || [])
-      setBroadcastNotifs(broadcasts || [])
+      const allowedList = (list || []).filter(isNotificationAllowed)
+      const allowedBroadcasts = (broadcasts || []).filter(bc => {
+        if (user?.role === 'admin') return true
+        return bc.target_role === 'all' || bc.target_role === 'staff'
+      })
+      setNotifications(allowedList)
+      setBroadcastNotifs(allowedBroadcasts)
     } catch (e) {
       console.error(e)
     }
