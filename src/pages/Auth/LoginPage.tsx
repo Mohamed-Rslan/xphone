@@ -14,7 +14,7 @@ export default function LoginPage() {
   const [showOtpModal, setShowOtpModal] = useState(false)
 
   const { login } = useAuthStore()
-  const { storeLogo, storeName } = useSettingsStore()
+  const { storeLogo, storeName, storeTagline } = useSettingsStore()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -75,7 +75,9 @@ export default function LoginPage() {
             <h1 className="text-3xl font-black tracking-wide" style={{ color: 'var(--clr-text)' }}>
               {storeName || 'XPhone'}
             </h1>
-            <p className="text-sm mt-1.5 font-bold text-amber-400">نظام إدارة المبيعات والمخزون والمحاسبة والخدمات المالية</p>
+            {storeTagline && (
+              <p className="text-sm mt-1.5 font-bold text-amber-400">{storeTagline}</p>
+            )}
           </div>
 
           {/* Form */}

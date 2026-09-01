@@ -39,9 +39,13 @@ pub fn run() {
             products::update_product,
             products::delete_product,
             products::get_brands,
+            products::create_brand,
+            products::update_brand,
+            products::delete_brand,
             products::get_categories,
             products::get_low_stock_products,
             products::get_stock_movements,
+            products::get_inventory_ledger,
             // Sales / POS
             sales::create_sale,
             sales::get_sales,

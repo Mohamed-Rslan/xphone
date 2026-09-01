@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { getSettings, getUsers, createUser, getNotificationRules, updateNotificationRule, NotificationRule } from '../../lib/commands'
-import { Plus, Palette, Check, Sparkles, User, Store, Upload, Image as ImageIcon, Trash2, Camera, ShieldCheck, Type, ZoomIn, BellRing, ShieldAlert, AlertTriangle, Clock, Sliders } from 'lucide-react'
+import { Plus, Palette, Check, Sparkles, User, Store, Upload, Image as ImageIcon, Trash2, Camera, ShieldCheck, Type, ZoomIn, BellRing, ShieldAlert, AlertTriangle, Clock, Sliders, MessageSquare, Send } from 'lucide-react'
 import { useThemeStore, THEMES } from '../../store/themeStore'
 import { useSettingsStore } from '../../store/settingsStore'
+import { openWhatsApp } from '../../lib/whatsapp'
 import toast from 'react-hot-toast'
 
 import EditUserPermissionsModal from '../../components/EditUserPermissionsModal'
@@ -16,14 +17,37 @@ export default function SettingsPage({ scale = 0.9, setScale }: SettingsPageProp
   const [settings, setSettings] = useState<Record<string, string>>({})
   const [users, setUsers] = useState<any[]>([])
   const [notificationRules, setNotificationRules] = useState<NotificationRule[]>([])
-  const [tab, setTab] = useState<'general' | 'users' | 'themes' | 'notifications'>('general')
+  const [tab, setTab] = useState<'general' | 'users' | 'themes' | 'notifications' | 'whatsapp'>('general')
   const [showUserModal, setShowUserModal] = useState(false)
   const [editingUser, setEditingUser] = useState<any>(null)
   const [saving, setSaving] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const { currentTheme, setTheme } = useThemeStore()
-  const { storeLogo, storeName, saveStoreSettings, loadSettings } = useSettingsStore()
+  const { currentTheme, setTheme, customPrimary, customAccent, setCustomColors, resetCustomColors } = useThemeStore()
+  const activeThemeObj = THEMES.find(t => t.id === currentTheme) || THEMES[0]
+  const {
+    storeLogo, storeName, saveStoreSettings, loadSettings,
+    waTagline, waSaleHeader, waMonetaryHeader, waRepairHeader, waFooterNote, saveWhatsAppSettings
+  } = useSettingsStore()
+
+  // Local state for WhatsApp formatting form
+  const [waForm, setWaForm] = useState({
+    tagline: 'لأنك تستحق الأفضل 🌹',
+    saleHeader: '🧾 إيصال فاتورة شراء من {{storeName}}',
+    monetaryHeader: '💸 إيصال معاملة خدمة مالية - {{storeName}}',
+    repairHeader: '🔧 كارت استلام/تسليم صيانة - {{storeName}}',
+    footerNote: 'شكراً لزيارتكم وتثمين ثقتكم بنا!',
+  })
+
+  useEffect(() => {
+    setWaForm({
+      tagline: waTagline || 'لأنك تستحق الأفضل 🌹',
+      saleHeader: waSaleHeader || '🧾 إيصال فاتورة شراء من {{storeName}}',
+      monetaryHeader: waMonetaryHeader || '💸 إيصال معاملة خدمة مالية - {{storeName}}',
+      repairHeader: waRepairHeader || '🔧 كارت استلام/تسليم صيانة - {{storeName}}',
+      footerNote: waFooterNote || 'شكراً لزيارتكم وتثمين ثقتكم بنا!',
+    })
+  }, [waTagline, waSaleHeader, waMonetaryHeader, waRepairHeader, waFooterNote])
 
   const load = async () => {
     const [s, u, rules] = await Promise.all([getSettings(), getUsers(), getNotificationRules()])
@@ -75,6 +99,7 @@ export default function SettingsPage({ scale = 0.9, setScale }: SettingsPageProp
         logo: settings.store_logo ?? '',
         address: settings.store_address ?? '',
         phone: settings.store_phone ?? '',
+        tagline: settings.store_tagline ?? '',
       })
       await loadSettings()
       toast.success('تم حفظ إعدادات وبيانات المتجر بنجاح!')
@@ -135,6 +160,16 @@ export default function SettingsPage({ scale = 0.9, setScale }: SettingsPageProp
           <BellRing size={15} />
           إدارة وتفضيلات التنبيهات والأولويات ({notificationRules.length})
         </button>
+
+        <button
+          className={`badge cursor-pointer px-4 py-2.5 text-sm font-bold flex items-center gap-1.5 transition-all ${
+            tab === 'whatsapp' ? 'badge-primary shadow-lg' : 'badge-muted'
+          }`}
+          onClick={() => setTab('whatsapp')}
+        >
+          <MessageSquare size={15} className="text-emerald-400" />
+          تنسيق وقوالب رسائل الواتساب
+        </button>
       </div>
 
       {/* ───────────────────────────────────────────────────────────────────────────── */}
@@ -177,6 +212,19 @@ export default function SettingsPage({ scale = 0.9, setScale }: SettingsPageProp
                 placeholder="010XXXXXXXX"
                 value={settings.store_phone ?? ''}
                 onChange={e => setSettings(s => ({ ...s, store_phone: e.target.value }))}
+              />
+            </div>
+
+            <div>
+              <label className="label font-bold text-xs flex items-center justify-between">
+                <span>الشعار اللفظي / العبارة الترويجية (أسفل اللوجو)</span>
+                <span className="text-[10px] text-[var(--clr-muted)] font-normal">اختياري (اتركه فارغاً لإخفائه)</span>
+              </label>
+              <input
+                className="input w-full font-bold text-xs text-amber-400"
+                placeholder="مثال: لأنك تستحق الأفضل ✨ (أو اتركه فارغاً بدون شعار)"
+                value={settings.store_tagline ?? ''}
+                onChange={e => setSettings(s => ({ ...s, store_tagline: e.target.value }))}
               />
             </div>
 
@@ -439,15 +487,173 @@ export default function SettingsPage({ scale = 0.9, setScale }: SettingsPageProp
       )}
 
       {/* ───────────────────────────────────────────────────────────────────────────── */}
-      {/* 3. THEMES & COLOR PALETTES & FONT SIZE */}
+      {/* 3. THEMES & COLOR PALETTES & FONT SIZE & COLOR CUSTOMIZER */}
       {/* ───────────────────────────────────────────────────────────────────────────── */}
       {tab === 'themes' && (
         <div className="flex flex-col gap-6">
           <div>
-            <h3 className="font-bold text-lg">اختر الثيم والمظهر وحجم الخط المفضل لك</h3>
+            <h3 className="font-bold text-lg">اختر الثيم، خصص ألوانك الخاصة، وتحكم في حجم الخط</h3>
             <p className="text-xs text-[var(--clr-muted)]">
-              يحتوي النظام على 8 ثيمات جرافيكية فائقة الوضوح + إمكانية تكبير وتصغير حجم الخط بما يناسب شاشتك
+              يحتوي النظام على 12 ثيماً جرافيكياً فائق الوضوح (بما في ذلك ثيمات ويندوز 11 فلوينت وأبل جلاس الزجاجي) + إمكانية اختيار وتغيير كافة الألوان يدوياً بأي درجة لونية تفضلها
             </p>
+          </div>
+
+          {/* Color Customizer Card (تخصيص واختيار ألوان النظام من قبل المستخدم) */}
+          <div className="glass-card p-5 border border-[var(--clr-primary)]/40 rounded-2xl flex flex-col gap-4 shadow-lg">
+            <div className="flex items-center justify-between border-b pb-3 flex-wrap gap-2" style={{ borderColor: 'var(--clr-border)' }}>
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-[var(--clr-primary)]/20 text-[var(--clr-primary)] flex items-center justify-center font-bold">
+                  <Palette size={20} />
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm text-[var(--clr-text)]">🎨 تخصيص ألوان النظام والتحكم الكامل في درجات الألوان</h4>
+                  <p className="text-[11px] text-[var(--clr-muted)]">اختر اللون الأساسي ولون التمييز الخاص بك أو اختر من التشكيلات الجاهزة. يتم تطبيق الألوان وحفظها فوراً</p>
+                </div>
+              </div>
+
+              {(customPrimary || customAccent) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    resetCustomColors()
+                    toast.success('تمت استعادة الألوان الافتراضية للثيم الأصلي')
+                  }}
+                  className="btn-secondary text-xs font-bold py-1.5 px-3 flex items-center gap-1.5 text-amber-400 hover:text-amber-300"
+                >
+                  <span>↺ استعادة ألوان الثيم الأصلية</span>
+                </button>
+              )}
+            </div>
+
+            {/* Color Pickers & Live Preview */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Primary Color Picker */}
+              <div className="p-3.5 rounded-xl border bg-black/5 flex flex-col gap-2.5" style={{ borderColor: 'var(--clr-border)' }}>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-[var(--clr-text)]">اللون الأساسي (Primary Color):</label>
+                  <span className="text-[11px] font-mono font-bold text-[var(--clr-primary)]">
+                    {customPrimary || activeThemeObj.primaryColor}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <input
+                    type="color"
+                    className="w-10 h-10 rounded-lg cursor-pointer border-0 p-0 bg-transparent"
+                    value={customPrimary || activeThemeObj.primaryColor}
+                    onChange={e => {
+                      const color = e.target.value
+                      setCustomColors(color, customAccent || activeThemeObj.accentColor)
+                    }}
+                  />
+                  <input
+                    type="text"
+                    className="input text-xs font-mono font-bold uppercase py-1.5 px-2.5"
+                    dir="ltr"
+                    value={customPrimary || activeThemeObj.primaryColor}
+                    onChange={e => {
+                      const val = e.target.value
+                      if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+                        setCustomColors(val, customAccent || activeThemeObj.accentColor)
+                      }
+                    }}
+                  />
+                </div>
+                <span className="text-[10px] text-[var(--clr-muted)]">يتحكم في الأزرار الرئيسية، القوائم النشطة، والإبرازات</span>
+              </div>
+
+              {/* Accent Color Picker */}
+              <div className="p-3.5 rounded-xl border bg-black/5 flex flex-col gap-2.5" style={{ borderColor: 'var(--clr-border)' }}>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-[var(--clr-text)]">لون التمييز والفرعي (Accent Color):</label>
+                  <span className="text-[11px] font-mono font-bold" style={{ color: customAccent || activeThemeObj.accentColor }}>
+                    {customAccent || activeThemeObj.accentColor}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <input
+                    type="color"
+                    className="w-10 h-10 rounded-lg cursor-pointer border-0 p-0 bg-transparent"
+                    value={customAccent || activeThemeObj.accentColor}
+                    onChange={e => {
+                      const color = e.target.value
+                      setCustomColors(customPrimary || activeThemeObj.primaryColor, color)
+                    }}
+                  />
+                  <input
+                    type="text"
+                    className="input text-xs font-mono font-bold uppercase py-1.5 px-2.5"
+                    dir="ltr"
+                    value={customAccent || activeThemeObj.accentColor}
+                    onChange={e => {
+                      const val = e.target.value
+                      if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+                        setCustomColors(customPrimary || activeThemeObj.primaryColor, val)
+                      }
+                    }}
+                  />
+                </div>
+                <span className="text-[10px] text-[var(--clr-muted)]">يتحكم في الإشعارات الثانوية، البادجات، والمؤشرات الحيوية</span>
+              </div>
+
+              {/* Live Preview Card */}
+              <div className="p-3.5 rounded-xl border bg-black/5 flex flex-col justify-between gap-2" style={{ borderColor: 'var(--clr-border)' }}>
+                <span className="text-xs font-bold text-[var(--clr-text)]">معاينة حية لشكل العناصر بالألوان الحالية:</span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button type="button" className="btn-primary text-xs py-1.5 px-3 font-bold shadow-md">
+                    زر رئيسي تجريبي
+                  </button>
+                  <span className="badge badge-primary text-xs font-bold">
+                    بادج نشط
+                  </span>
+                  <div
+                    className="w-6 h-6 rounded-full border border-black/20 shadow-sm"
+                    style={{ background: customAccent || activeThemeObj.accentColor }}
+                    title="اللون الفرعي"
+                  />
+                </div>
+                <span className="text-[10px] text-[var(--clr-muted)]">يتم حفظ خياراتك وتطبيقها على جميع شاشات النظام فوراً</span>
+              </div>
+            </div>
+
+            {/* Preset Color Palettes */}
+            <div className="flex flex-col gap-2 pt-2 border-t" style={{ borderColor: 'var(--clr-border)' }}>
+              <span className="text-xs font-bold text-[var(--clr-text-2)]">أو اختر باليت لوني سريع من الباليتات الأكثر تناسقاً:</span>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+                {[
+                  { name: 'أزرق ويندوز ملكي', primary: '#0067c0', accent: '#005fb8' },
+                  { name: 'أزرق أبل كلاسيكي', primary: '#0071e3', accent: '#5e5ce6' },
+                  { name: 'بنفسجي نيون عصري', primary: '#7c6bff', accent: '#00d4aa' },
+                  { name: 'أخضر زمردي ناصع', primary: '#059669', accent: '#10b981' },
+                  { name: 'أزرق سماوي فيروزي', primary: '#0284c7', accent: '#06b6d4' },
+                  { name: 'ذهبي عنبري ملكي', primary: '#d97706', accent: '#f59e0b' },
+                  { name: 'أحمر ياقوتي وقرمزي', primary: '#e11d48', accent: '#f43f5e' },
+                  { name: 'وردي فوشيا عصري', primary: '#d946ef', accent: '#ec4899' },
+                  { name: 'برتقالي متوهج دافئ', primary: '#ea580c', accent: '#f97316' },
+                  { name: 'نيلي ليلي هادئ', primary: '#4f46e5', accent: '#6366f1' },
+                ].map((pal, idx) => {
+                  const isMatch = customPrimary === pal.primary && customAccent === pal.accent
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => {
+                        setCustomColors(pal.primary, pal.accent)
+                        toast.success(`تم تطبيق باليت: ${pal.name}`)
+                      }}
+                      className={`p-2 rounded-xl border text-right transition-all flex items-center justify-between gap-2 cursor-pointer hover:scale-[1.02] ${
+                        isMatch ? 'border-[var(--clr-primary)] ring-2 ring-[var(--clr-primary)]/40 bg-[var(--clr-primary)]/10 font-bold' : 'hover:border-white/20 bg-white/5'
+                      }`}
+                    >
+                      <span className="text-[11px] truncate text-[var(--clr-text)]">{pal.name}</span>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <div className="w-3.5 h-3.5 rounded-full border border-black/20" style={{ background: pal.primary }} />
+                        <div className="w-3.5 h-3.5 rounded-full border border-black/20" style={{ background: pal.accent }} />
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
           </div>
 
           {/* Font Size & Scale Control Card */}
@@ -503,10 +709,10 @@ export default function SettingsPage({ scale = 0.9, setScale }: SettingsPageProp
           {/* Section 1: Day Themes */}
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-sm font-bold text-amber-400 border-b pb-2" style={{ borderColor: 'var(--clr-border)' }}>
-              <span>☀️ الثيمات النهارية (4 ثيمات فائقة الوضوح والتباين):</span>
+              <span>☀️ الثيمات النهارية ({THEMES.filter(t => !t.isDark).length} ثيمات فائقة الوضوح والتباين):</span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5">
               {THEMES.filter(t => !t.isDark).map((th) => {
                 const isSelected = currentTheme === th.id
 
@@ -570,10 +776,10 @@ export default function SettingsPage({ scale = 0.9, setScale }: SettingsPageProp
           {/* Section 2: Night Themes */}
           <div className="space-y-3 pt-2">
             <div className="flex items-center gap-2 text-sm font-bold text-sky-300 border-b pb-2" style={{ borderColor: 'var(--clr-border)' }}>
-              <span>🌙 الثيمات الليلية (4 ثيمات داكنة ومريحة للعين):</span>
+              <span>🌙 الثيمات الليلية ({THEMES.filter(t => t.isDark).length} ثيمات داكنة ومريحة للعين):</span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5">
               {THEMES.filter(t => t.isDark).map((th) => {
                 const isSelected = currentTheme === th.id
 
@@ -759,6 +965,141 @@ export default function SettingsPage({ scale = 0.9, setScale }: SettingsPageProp
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* ───────────────────────────────────────────────────────────────────────────── */}
+      {/* 5. WHATSAPP TEMPLATES & FORMATTING SETTINGS */}
+      {/* ───────────────────────────────────────────────────────────────────────────── */}
+      {tab === 'whatsapp' && (
+        <div className="glass-card p-6 flex flex-col gap-6">
+          <div className="flex items-center justify-between border-b pb-4 flex-wrap gap-3" style={{ borderColor: 'var(--clr-border)' }}>
+            <div>
+              <h3 className="font-bold text-lg text-emerald-400 flex items-center gap-2">
+                <MessageSquare size={20} />
+                إعدادات وتنسيق قوالب رسائل الواتساب
+              </h3>
+              <p className="text-xs text-[var(--clr-muted)] mt-0.5">
+                تخصيص العبارات الافتتاحية والختامية، والشعار الختامي تحت اسم المحل (لأنك تستحق الأفضل 🌹)
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                const sampleMsg = `*🧾 إيصال فاتورة تجريبية من ${storeName || 'XPhone'}*\n------------------------------------\n🔢 رقم الفاتورة: *#TEST-101*\n📅 التاريخ: ${new Date().toLocaleDateString('ar-EG')}\n👤 العميل: عميل تجريبي\n------------------------------------\n1. *جهاز شاشة حماية وشاحن* - 350.00 ج.م\n------------------------------------\n💰 *الإجمالي النهائي: 350.00 ج.م*\n------------------------------------\n${waForm.footerNote}\n${waForm.tagline}`
+                openWhatsApp('01000000000', sampleMsg, 'معاينة تجريبية للرسالة', 'عميل التجربة')
+              }}
+              className="btn-secondary text-xs font-bold py-2 px-4 flex items-center gap-2 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/10 cursor-pointer shadow-md"
+              title="اختيار ومعاينة النافذة المنبثقة الجانبية للواتساب فوراً"
+            >
+              <Send size={15} />
+              معاينة واختبار النافذة المنبثقة الجانبية 🚀
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Template Controls */}
+            <div className="flex flex-col gap-4">
+              <div>
+                <label className="label font-bold text-xs text-amber-300">
+                  الشعار والعبارة الختامية الرئيسية (تحت اسم المحل) *
+                </label>
+                <input
+                  className="input w-full font-bold text-sm text-amber-300"
+                  value={waForm.tagline}
+                  onChange={e => setWaForm(f => ({ ...f, tagline: e.target.value }))}
+                  placeholder="مثال: لأنك تستحق الأفضل 🌹"
+                />
+                <p className="text-[10px] text-[var(--clr-muted)] mt-1">
+                  يظهر هذا الشعار تلقائياً أسفل جميع رسائل وإيصالات الواتساب وتراسات النظام.
+                </p>
+              </div>
+
+              <div>
+                <label className="label font-bold text-xs">ترويسة إيصال فواتير المبيعات</label>
+                <input
+                  className="input w-full text-xs font-mono"
+                  value={waForm.saleHeader}
+                  onChange={e => setWaForm(f => ({ ...f, saleHeader: e.target.value }))}
+                  placeholder="🧾 إيصال فاتورة شراء من {{storeName}}"
+                />
+              </div>
+
+              <div>
+                <label className="label font-bold text-xs">ترويسة إيصال المعاملات المالية (سحب/إيداع)</label>
+                <input
+                  className="input w-full text-xs font-mono"
+                  value={waForm.monetaryHeader}
+                  onChange={e => setWaForm(f => ({ ...f, monetaryHeader: e.target.value }))}
+                  placeholder="💸 إيصال معاملة خدمة مالية - {{storeName}}"
+                />
+              </div>
+
+              <div>
+                <label className="label font-bold text-xs">ترويسة كروت وتحديثات حالة الصيانة</label>
+                <input
+                  className="input w-full text-xs font-mono"
+                  value={waForm.repairHeader}
+                  onChange={e => setWaForm(f => ({ ...f, repairHeader: e.target.value }))}
+                  placeholder="🔧 كارت استلام/تسليم صيانة - {{storeName}}"
+                />
+              </div>
+
+              <div>
+                <label className="label font-bold text-xs">رسالة الشكر والتقدير العامة</label>
+                <input
+                  className="input w-full text-xs"
+                  value={waForm.footerNote}
+                  onChange={e => setWaForm(f => ({ ...f, footerNote: e.target.value }))}
+                  placeholder="شكراً لزيارتكم وتثمين ثقتكم بنا!"
+                />
+              </div>
+
+              <div className="pt-3 border-t mt-2 flex justify-end" style={{ borderColor: 'var(--clr-border)' }}>
+                <button
+                  type="button"
+                  className="btn-primary font-bold px-7 py-2.5 shadow-lg cursor-pointer flex items-center gap-2"
+                  onClick={async () => {
+                    setSaving(true)
+                    try {
+                      await saveWhatsAppSettings({
+                        tagline: waForm.tagline,
+                        saleHeader: waForm.saleHeader,
+                        monetaryHeader: waForm.monetaryHeader,
+                        repairHeader: waForm.repairHeader,
+                        footerNote: waForm.footerNote,
+                      })
+                      toast.success('تم حفظ تنسيقات وقوالب رسائل الواتساب بنجاح!')
+                    } catch (e: any) {
+                      toast.error('فشل حفظ الإعدادات')
+                    } finally {
+                      setSaving(false)
+                    }
+                  }}
+                  disabled={saving}
+                >
+                  <Check size={16} />
+                  {saving ? 'جاري الحفظ...' : 'حفظ تنسيقات وقوالب الواتساب'}
+                </button>
+              </div>
+            </div>
+
+            {/* Live Message Preview Card */}
+            <div className="p-4 rounded-2xl bg-black/30 border border-emerald-500/20 flex flex-col gap-3">
+              <div className="flex items-center justify-between border-b pb-2" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+                <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                  <MessageSquare size={15} />
+                  معاينة حية لشكل رسالة الإيصال:
+                </span>
+                <span className="badge badge-success text-[10px]">تنسيق حي</span>
+              </div>
+
+              <div className="bg-[#0b141a] p-4 rounded-xl text-emerald-100 font-mono text-xs leading-relaxed border border-emerald-500/10 shadow-inner whitespace-pre-wrap">
+                {`*${(waForm.saleHeader || '').replace('{{storeName}}', storeName || 'XPhone')}*\n------------------------------------\n🔢 رقم الفاتورة: *#INV-0089*\n📅 التاريخ: ${new Date().toLocaleDateString('ar-EG')}\n👤 العميل: أحمد محمود\n------------------------------------\n📦 *المنتجات والمشتريات:*\n1. *جراب حماية ايفون* (العدد: 1) - 150.00 ج.م\n------------------------------------\n💰 *الإجمالي النهائي: 150.00 ج.م*\n------------------------------------\n${waForm.footerNote}\n${waForm.tagline}`}
+              </div>
+            </div>
           </div>
         </div>
       )}

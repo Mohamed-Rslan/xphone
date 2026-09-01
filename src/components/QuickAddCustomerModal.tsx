@@ -42,8 +42,8 @@ export default function QuickAddCustomerModal({ onClose, onSuccess }: QuickAddCu
 
   return (
     <div
-      className="modal-overlay z-[100]"
-      style={{ zIndex: 100 }}
+      className="modal-overlay z-[99999]"
+      style={{ zIndex: 99999 }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
       <div

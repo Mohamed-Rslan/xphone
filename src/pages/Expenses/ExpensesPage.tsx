@@ -371,10 +371,10 @@ export default function ExpensesPage() {
                 className="btn-secondary flex items-center gap-2 font-bold text-xs cursor-pointer"
                 style={{ borderColor: 'rgba(16,185,129,0.4)', color: '#34d399' }}
                 onClick={handleExportExpensesExcel}
-                title="تصدير جميع المصروفات النقدية لملف Excel"
+                title="تصدير دفتر أستاذ المصروفات وقائمة المصاريف لملف Excel"
               >
                 <FileSpreadsheet size={16} />
-                تصدير المصروفات Excel
+                تصدير دفتر أستاذ المصروفات Excel
               </button>
               <button className="btn-primary flex items-center gap-2 font-bold text-xs cursor-pointer" onClick={openAddModal}>
                 <Plus size={18} />
@@ -573,9 +573,15 @@ export default function ExpensesPage() {
                       <td className="py-3 px-2 text-xs">{exp.description || '—'}</td>
                       <td className="py-3 px-2 font-mono font-bold text-red-400">{formatEGP(exp.amount)}</td>
                       <td className="py-3 px-2">
-                        <span className={`badge ${exp.is_recurring ? 'badge-primary' : 'badge-neutral'}`}>
-                          {exp.is_recurring ? `دوري (${exp.recurrence || 'monthly'})` : 'عارض'}
-                        </span>
+                        {exp.category_name?.includes('عمول') || exp.category_name?.includes('تحويل') || exp.description?.includes('عمولة') ? (
+                          <span className="badge bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold">
+                            عمولة تحويل بنكية 💸
+                          </span>
+                        ) : (
+                          <span className={`badge ${exp.is_recurring ? 'badge-primary' : 'badge-neutral'}`}>
+                            {exp.is_recurring ? `دوري (${exp.recurrence || 'monthly'})` : 'عارض'}
+                          </span>
+                        )}
                       </td>
                       <td className="py-3 px-2 text-xs" style={{ color: 'var(--clr-accent)' }}>
                         {exp.financial_account_name || 'الخزينة الرئيسية'}

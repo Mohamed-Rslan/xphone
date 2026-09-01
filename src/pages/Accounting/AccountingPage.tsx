@@ -22,6 +22,7 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 import { exportFullAccountingExcel, exportShareholderLedgerExcel, exportLiabilitiesExcel } from '../../lib/excel'
 import toast from 'react-hot-toast'
 import CashAccountMovementsModal from '../../components/CashAccountMovementsModal'
+import ExportReportModal from '../../components/ExportReportModal'
 
 const COLORS = ['#7c6bff', '#00d4aa', '#ffab3e', '#ff5c7c', '#44e887', '#a78bfa', '#34d399']
 
@@ -84,6 +85,7 @@ export default function AccountingPage() {
   const [returnReason, setReturnReason] = useState('')
   const [returnMethod, setReturnMethod] = useState('cash')
   const [exporting, setExporting] = useState(false)
+  const [showExportModal, setShowExportModal] = useState(false)
 
   const openReturnModalForSale = async (inv: any) => {
     try {
@@ -147,6 +149,7 @@ export default function AccountingPage() {
   const [transferFrom, setTransferFrom] = useState('cash_drawer')
   const [transferTo, setTransferTo] = useState('')
   const [transferAmount, setTransferAmount] = useState('')
+  const [transferFee, setTransferFee] = useState('')
   const [transferNotes, setTransferNotes] = useState('')
 
   const [assetName, setAssetName] = useState('')
@@ -315,18 +318,24 @@ export default function AccountingPage() {
   const handleTransfer = async (e: React.FormEvent) => {
     e.preventDefault()
     const amt = parseFloat(transferAmount)
+    const fee = transferFee ? parseFloat(transferFee) : 0
     if (!amt || amt <= 0) return toast.error('يرجى كتابة مبلغ صحيح')
     if (!transferTo) return toast.error('يرجى اختيار الحساب المحول إليه')
+    if (transferFrom === transferTo) return toast.error('لا يمكن التحويل لنفس الحساب')
+    if (fee < 0) return toast.error('لا يمكن أن تكون عمولة التحويل سالبة')
+
     try {
       await transferFinancialAmount({
         from_account_id: transferFrom,
         to_account_id: transferTo,
         amount: amt,
+        fee: fee > 0 ? fee : null,
         notes: transferNotes || undefined,
       })
-      toast.success('تم التحويل بين الحسابات بنجاح')
+      toast.success(fee > 0 ? 'تم التحويل وقيد عمولة التحويل بالمصروفات بنجاح' : 'تم التحويل بين الحسابات بنجاح')
       setShowTransferModal(false)
       setTransferAmount('')
+      setTransferFee('')
       setTransferNotes('')
       loadData()
     } catch (err: any) {
@@ -521,7 +530,7 @@ export default function AccountingPage() {
           />
           <button className="btn-secondary" onClick={() => { setDateFrom(monthStart()); setDateTo(today()) }}>هذا الشهر</button>
           <button className="btn-secondary" onClick={() => { setDateFrom(yearStart()); setDateTo(today()) }}>هذا العام</button>
-          <button className="btn-primary flex items-center gap-2" onClick={handleExportExcel} disabled={exporting}>
+          <button className="btn-primary flex items-center gap-2" onClick={() => setShowExportModal(true)} disabled={exporting}>
             <FileSpreadsheet size={16} />
             تصدير تقرير Excel الشامل
           </button>
@@ -1161,7 +1170,8 @@ export default function AccountingPage() {
                 value={ledgerCategoryFilter}
                 onChange={e => setLedgerCategoryFilter(e.target.value)}
               >
-                <option value="all">جميع دفاتر الأستاذ</option>
+                <option value="all">جميع دفاتر الأستاذ (General Ledger)</option>
+                <option value="expenses">دفتر أستاذ المصروفات والتكاليف التشغيلية</option>
                 <option value="assets_cash">دفتر أستاذ النقدية والحسابات المالية</option>
                 <option value="assets_inventory">دفتر أستاذ المخزون السلعي والهالك</option>
                 <option value="assets_fixed">دفتر أستاذ الأصول الثابتة</option>
@@ -2186,29 +2196,80 @@ export default function AccountingPage() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-bold block mb-1">من حساب:</label>
-                <select className="input w-full" value={transferFrom} onChange={e => setTransferFrom(e.target.value)}>
+                <select className="input w-full font-bold" value={transferFrom} onChange={e => setTransferFrom(e.target.value)}>
                   {accountsList.map(a => <option key={a.id} value={a.id}>{a.name_ar}</option>)}
                 </select>
               </div>
               <div>
                 <label className="text-xs font-bold block mb-1">إلى حساب:</label>
-                <select className="input w-full" value={transferTo} onChange={e => setTransferTo(e.target.value)} required>
+                <select className="input w-full font-bold" value={transferTo} onChange={e => setTransferTo(e.target.value)} required>
                   <option value="">اختر الحساب المستلم</option>
                   {accountsList.filter(a => a.id !== transferFrom).map(a => <option key={a.id} value={a.id}>{a.name_ar}</option>)}
                 </select>
               </div>
             </div>
-            <div>
-              <label className="text-xs font-bold block mb-1">مبلغ التحويل (ج.م):</label>
-              <input type="number" step="any" className="input w-full" value={transferAmount} onChange={e => setTransferAmount(e.target.value)} required />
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-bold block mb-1">مبلغ التحويل (ج.م): *</label>
+                <input
+                  type="number"
+                  step="any"
+                  min="0.5"
+                  className="input w-full font-mono font-bold text-emerald-400"
+                  value={transferAmount}
+                  onChange={e => setTransferAmount(e.target.value)}
+                  placeholder="0.00"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold block mb-1 flex justify-between">
+                  <span>عمولة التحويل:</span>
+                  <span className="text-[10px] text-amber-400 font-bold">(مصروف)</span>
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  className="input w-full font-mono font-bold text-amber-400"
+                  value={transferFee}
+                  onChange={e => setTransferFee(e.target.value)}
+                  placeholder="0.00"
+                />
+              </div>
             </div>
+
+            {/* Live Financial Breakdown Summary */}
+            {parseFloat(transferAmount) > 0 && (
+              <div className="p-3 rounded-xl bg-white/5 border border-white/10 space-y-1 text-xs">
+                <div className="flex justify-between items-center text-[var(--clr-muted)]">
+                  <span>المبلغ المستلم بالحساب الهدف:</span>
+                  <span className="font-mono font-bold text-emerald-400">+{formatEGP(parseFloat(transferAmount) || 0)}</span>
+                </div>
+                {parseFloat(transferFee) > 0 && (
+                  <div className="flex justify-between items-center text-amber-300">
+                    <span>عمولة التحويل (مصروف بنكي):</span>
+                    <span className="font-mono font-bold">-{formatEGP(parseFloat(transferFee) || 0)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between items-center pt-1 border-t border-white/10 font-bold text-[var(--clr-text)]">
+                  <span>إجمالي الخصم من المصدر:</span>
+                  <span className="font-mono font-black text-red-400">
+                    -{formatEGP((parseFloat(transferAmount) || 0) + (parseFloat(transferFee) || 0))}
+                  </span>
+                </div>
+              </div>
+            )}
+
             <div>
               <label className="text-xs font-bold block mb-1">ملاحظات / سبب التحويل:</label>
-              <input className="input w-full" value={transferNotes} onChange={e => setTransferNotes(e.target.value)} />
+              <input className="input w-full" value={transferNotes} onChange={e => setTransferNotes(e.target.value)} placeholder="مثال: تغذية رصيد أو تسوية نقدية" />
             </div>
             <div className="flex justify-end gap-2 pt-3 border-t">
-              <button type="button" className="btn-secondary" onClick={() => setShowTransferModal(false)}>إلغاء</button>
-              <button type="submit" className="btn-primary">تنفيذ التحويل</button>
+              <button type="button" className="btn-secondary font-bold" onClick={() => setShowTransferModal(false)}>إلغاء</button>
+              <button type="submit" className="btn-primary font-bold shadow-lg">تنفيذ التحويل</button>
             </div>
           </form>
         </div>
@@ -2567,6 +2628,17 @@ export default function AccountingPage() {
             </div>
           </div>
         </div>
+      )}
+      {/* Export Sub-Modal */}
+      {showExportModal && (
+        <ExportReportModal
+          title="تصدير التقرير المحاسبي والمالي الشامل لـ Excel"
+          description="اختر الفترة الزمنية لتوليد وتفريغ الميزانية العمومية، الأرباح والخسائر، تفاصيل المبيعات، سجل المصروفات، وأرصدة السيولة"
+          onClose={() => setShowExportModal(false)}
+          onExport={async (df, dt) => {
+            return await exportFullAccountingExcel(df, dt)
+          }}
+        />
       )}
     </div>
   )

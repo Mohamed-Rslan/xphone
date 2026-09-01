@@ -15,6 +15,7 @@ import SettingsPage from '../pages/Settings/SettingsPage'
 import SuppliersPage from '../pages/Suppliers/SuppliersPage'
 import ExpensesPage from '../pages/Expenses/ExpensesPage'
 import { Lock } from 'lucide-react'
+import WhatsAppDrawerModal from '../components/WhatsAppDrawerModal'
 
 export type NavPage =
   | 'dashboard' | 'pos' | 'accounts' | 'expenses' | 'inventory' | 'repairs'
@@ -142,6 +143,7 @@ export default function AppShell({ scale, setScale }: AppShellProps) {
           {renderPage()}
         </main>
       </div>
+      <WhatsAppDrawerModal />
     </div>
   )
 }

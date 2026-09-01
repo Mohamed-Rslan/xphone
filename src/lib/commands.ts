@@ -26,6 +26,9 @@ export const deleteProduct = (id: string) =>
   invoke<void>('delete_product', { id })
 
 export const getBrands = () => invoke<any[]>('get_brands')
+export const createBrand = (name: string) => invoke<any>('create_brand', { name })
+export const updateBrand = (id: number, name: string) => invoke<void>('update_brand', { id, name })
+export const deleteBrand = (id: number) => invoke<void>('delete_brand', { id })
 export const getCategories = () => invoke<any[]>('get_categories')
 export const getLowStockProducts = () => invoke<any[]>('get_low_stock_products')
 
@@ -72,14 +75,34 @@ export const settleCustomerInvoices = (payload: {
 }) => invoke<any>('settle_customer_invoices', { payload })
 
 // ─── Repairs ────────────────────────────────────────────────────
-export const getRepairJobs = (params?: { status?: string; search?: string; date_from?: string; date_to?: string }) =>
+export const getRepairJobs = (params?: { status?: string; search?: string; date_from?: string; date_to?: string; technician_name?: string }) =>
   invoke<any[]>('get_repair_jobs', params)
 
 export const createRepairJob = (payload: any) =>
   invoke<any>('create_repair_job', { payload })
 
-export const updateRepairStatus = (id: string, status: string, technician_notes?: string, amount_paid?: number, labor_cost?: number, financial_account_id?: string) =>
-  invoke<void>('update_repair_status', { id, status, technicianNotes: technician_notes, amountPaid: amount_paid, laborCost: labor_cost, financialAccountId: financial_account_id })
+export const updateRepairStatus = (
+  id: string,
+  status: string,
+  technician_notes?: string,
+  amount_paid?: number,
+  labor_cost?: number,
+  parts_cost?: number,
+  delivery_cost?: number,
+  technician_name?: string,
+  financial_account_id?: string
+) =>
+  invoke<void>('update_repair_status', {
+    id,
+    status,
+    technicianNotes: technician_notes,
+    amountPaid: amount_paid,
+    laborCost: labor_cost,
+    partsCost: parts_cost,
+    deliveryCost: delivery_cost,
+    technicianName: technician_name,
+    financialAccountId: financial_account_id
+  })
 
 export const addRepairPart = (payload: any) =>
   invoke<void>('add_repair_part', { payload })
@@ -116,7 +139,14 @@ export const getShareholderLedger = (shareholderId?: string, dateFrom?: string, 
 export const getFinancialAccounts = () => invoke<any[]>('get_financial_accounts')
 export const createFinancialAccount = (payload: any) => invoke<any>('create_financial_account', { payload })
 export const deleteFinancialAccount = (id: string, targetAccountId: string) => invoke<void>('delete_financial_account', { id, targetAccountId })
-export const transferFinancialAmount = (payload: any) => invoke<void>('transfer_financial_amount', { payload })
+export const transferFinancialAmount = (payload: {
+  from_account_id: string
+  to_account_id: string
+  amount: number
+  fee?: number | null
+  notes?: string | null
+  user_id?: string | null
+}) => invoke<void>('transfer_financial_amount', { payload })
 export const adjustFinancialAccountBalance = (payload: { financial_account_id: string; new_balance: number; reason?: string; user_id?: string; username: string }) =>
   invoke<void>('adjust_financial_account_balance', { payload })
 export const getBeginningBalance = (dateFrom: string) => invoke<number>('get_beginning_balance', { dateFrom })
@@ -281,6 +311,9 @@ export const getDashboardStats = () => invoke<any>('get_dashboard_stats')
 
 export const getStockMovements = (productId?: string) =>
   invoke<any[]>('get_stock_movements', { productId })
+
+export const getInventoryLedger = (params?: { productId?: string; date_from?: string; date_to?: string }) =>
+  invoke<any>('get_inventory_ledger', params)
 
 // ─── Suppliers & Mappings ───────────────────────────────────────
 export const getSuppliers = () => invoke<any[]>('get_suppliers')

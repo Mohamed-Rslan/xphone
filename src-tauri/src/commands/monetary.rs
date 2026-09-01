@@ -7,6 +7,7 @@ use chrono::Utc;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct MonetaryTransaction {
     pub id: String,
+    pub receipt_no: Option<String>,
     pub service_type_id: i64,
     pub service_name: String,
     pub tx_type: String, // "cash_in_transfer_out" or "transfer_in_cash_out"
@@ -104,6 +105,19 @@ pub async fn create_monetary_transaction(
     let now = Utc::now().to_rfc3339();
     let target_acc_id = payload.financial_account_id.clone().unwrap_or_else(|| "cash_drawer".to_string());
 
+    // Generate monetary transaction receipt/invoice number: DDMMXXXM (e.g. 3108001M for 31st of August)
+    let local_now = chrono::Local::now();
+    let day_month = local_now.format("%d%m").to_string();
+    let today_date = local_now.format("%Y-%m-%d").to_string();
+
+    let count_today: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM monetary_transactions WHERE date(created_at) = ?1 OR substr(created_at, 1, 10) = ?1",
+        rusqlite::params![today_date],
+        |r| r.get(0),
+    ).unwrap_or(0);
+    let seq = count_today + 1;
+    let receipt_no = format!("{}{:03}M", day_month, seq);
+
     // Check user_id FK safety
     let valid_user_id: Option<String> = if let Some(ref uid) = payload.user_id {
         let exists: i64 = conn.query_row(
@@ -117,10 +131,10 @@ pub async fn create_monetary_transaction(
     };
 
     conn.execute(
-        "INSERT INTO monetary_transactions (id, service_type_id, tx_type, customer_id, customer_name, amount, commission, net_profit, notes, created_by, created_at, financial_account_id)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7, ?8, ?9, ?10, ?11)",
+        "INSERT INTO monetary_transactions (id, receipt_no, service_type_id, tx_type, customer_id, customer_name, amount, commission, net_profit, notes, created_by, created_at, financial_account_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8, ?9, ?10, ?11, ?12)",
         rusqlite::params![
-            id, payload.service_type_id, payload.tx_type, payload.customer_id,
+            id, receipt_no, payload.service_type_id, payload.tx_type, payload.customer_id,
             payload.customer_name, payload.amount, commission,
             payload.notes, valid_user_id, now,
             target_acc_id
@@ -138,7 +152,7 @@ pub async fn create_monetary_transaction(
     ).ok();
 
     Ok(MonetaryTransaction {
-        id, service_type_id: payload.service_type_id,
+        id, receipt_no: Some(receipt_no), service_type_id: payload.service_type_id,
         service_name, tx_type: payload.tx_type,
         customer_id: payload.customer_id, customer_name: payload.customer_name,
         amount: payload.amount, commission, net_profit: commission,
@@ -162,7 +176,7 @@ pub async fn get_monetary_transactions(
     if let Some(sid) = service_type_id { conditions.push(format!("mt.service_type_id = {}", sid)); }
 
     let sql = format!(
-        "SELECT mt.id, mt.service_type_id, mst.name_ar, mt.tx_type, mt.customer_id,
+        "SELECT mt.id, mt.receipt_no, mt.service_type_id, mst.name_ar, mt.tx_type, mt.customer_id,
                 mt.customer_name, mt.amount, mt.commission, mt.net_profit, mt.financial_account_id,
                 fa.name_ar, mt.notes, mt.created_by, mt.created_at
          FROM monetary_transactions mt
@@ -174,11 +188,11 @@ pub async fn get_monetary_transactions(
     let mut stmt = conn.prepare(&sql)?;
     let txs = stmt.query_map([], |r| {
         Ok(MonetaryTransaction {
-            id: r.get(0)?, service_type_id: r.get(1)?, service_name: r.get(2)?,
-            tx_type: r.get(3)?, customer_id: r.get(4)?, customer_name: r.get(5)?,
-            amount: r.get(6)?, commission: r.get(7)?, net_profit: r.get(8)?,
-            financial_account_id: r.get(9)?, financial_account_name: r.get(10)?,
-            notes: r.get(11)?, created_by: r.get(12)?, created_at: r.get(13)?,
+            id: r.get(0)?, receipt_no: r.get(1)?, service_type_id: r.get(2)?, service_name: r.get(3)?,
+            tx_type: r.get(4)?, customer_id: r.get(5)?, customer_name: r.get(6)?,
+            amount: r.get(7)?, commission: r.get(8)?, net_profit: r.get(9)?,
+            financial_account_id: r.get(10)?, financial_account_name: r.get(11)?,
+            notes: r.get(12)?, created_by: r.get(13)?, created_at: r.get(14)?,
         })
     })?.collect::<Result<Vec<_>, _>>()?;
     Ok(txs)

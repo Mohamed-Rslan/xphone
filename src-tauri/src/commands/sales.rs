@@ -65,17 +65,18 @@ pub async fn create_sale(
 ) -> Result<Sale, AppError> {
     let conn = state.pool.get()?;
 
-    // Generate invoice number
-    let next_no: i64 = conn.query_row(
-        "SELECT CAST(value AS INTEGER) FROM settings WHERE key='next_invoice_no'",
-        [],
+    // Generate invoice number: DDMMXXXS (e.g. 3108001S for 31st of August)
+    let local_now = chrono::Local::now();
+    let day_month = local_now.format("%d%m").to_string();
+    let today_date = local_now.format("%Y-%m-%d").to_string();
+
+    let count_today: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM sales WHERE date(created_at) = ?1 OR substr(created_at, 1, 10) = ?1",
+        rusqlite::params![today_date],
         |r| r.get(0),
-    ).unwrap_or(1);
-    let prefix: String = conn.query_row(
-        "SELECT value FROM settings WHERE key='invoice_prefix'",
-        [], |r| r.get(0),
-    ).unwrap_or_else(|_| "INV".to_string());
-    let invoice_no = format!("{}-{:05}", prefix, next_no);
+    ).unwrap_or(0);
+    let seq = count_today + 1;
+    let invoice_no = format!("{}{:03}S", day_month, seq);
 
     // Calculate totals
     let subtotal: f64 = payload.items.iter()
@@ -144,12 +145,6 @@ pub async fn create_sale(
             )?;
         }
     }
-
-    // Increment invoice number
-    conn.execute(
-        "UPDATE settings SET value=?1 WHERE key='next_invoice_no'",
-        rusqlite::params![(next_no + 1).to_string()],
-    )?;
 
     get_sale_by_id(&conn, &sale_id)
 }

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import {
   Search, Plus, Minus, Trash2, CreditCard, Banknote, X, Check,
-  ChevronDown, RotateCcw, FileText, Eye, Printer, Calendar, ShoppingBag, TrendingUp, User, Clock, FileSpreadsheet, Wallet
+  ChevronDown, RotateCcw, FileText, Eye, Printer, Calendar, ShoppingBag, TrendingUp, User, Clock, FileSpreadsheet, Wallet, Edit3, AlertCircle
 } from 'lucide-react'
 import {
   getProducts, createSale, getCustomers, getSettings, getFinancialAccounts,
@@ -34,6 +34,10 @@ export default function POSPage() {
   const [financialAccounts, setFinancialAccounts] = useState<any[]>([])
   const [selectedAccountId, setSelectedAccountId] = useState('cash_drawer')
   const searchRef = useRef<HTMLInputElement>(null)
+
+  // Quantity Edit Modal State
+  const [editingCartItem, setEditingCartItem] = useState<any | null>(null)
+  const [editQtyValue, setEditQtyValue] = useState<number>(1)
 
   // Sales History modal state
   const [showSalesHistoryModal, setShowSalesHistoryModal] = useState(false)
@@ -205,7 +209,15 @@ export default function POSPage() {
 
   const handleCheckout = async () => {
     if (cart.items.length === 0) { toast.error('السلة فارغة'); return }
-    if (totalPaid < cart.total()) { toast.error('المبلغ المدفوع أقل من الإجمالي'); return }
+    
+    const remainingCredit = cart.total() - totalPaid
+    if (remainingCredit > 0) {
+      if (!cart.customerId) {
+        toast.error('يجب اختيار عميل لتسجيل المبلغ الآجل على حسابه في الأصول المتداولة');
+        return
+      }
+    }
+
     setLoading(true)
     try {
       const sale = await createSale({
@@ -234,7 +246,11 @@ export default function POSPage() {
       cart.clear()
       setShowCheckout(false)
       setCashAmount(0); setCardAmount(0)
-      toast.success(`تم البيع — فاتورة ${sale.invoice_no}`)
+      if (remainingCredit > 0) {
+        toast.success(`تم البيع الآجل — فاتورة ${sale.invoice_no} وتسجيل ${formatEGP(remainingCredit)} على العميل`);
+      } else {
+        toast.success(`تم البيع — فاتورة ${sale.invoice_no}`);
+      }
     } catch (err: any) {
       toast.error(typeof err === 'string' ? err : 'فشل إتمام البيع')
     } finally {
@@ -312,8 +328,8 @@ export default function POSPage() {
                 loadSalesHistory()
               }}
             >
-              <FileText size={15} />
-              حركة المبيعات وفواتير اليوم
+              <FileText size={18} />
+              حركة المبيعات والفواتير
             </button>
 
             <button
@@ -407,7 +423,11 @@ export default function POSPage() {
               <p style={{ color: 'var(--clr-muted)' }} className="text-sm">السلة فارغة</p>
             </div>
           ) : cart.items.map(item => (
-            <CartItemRow key={item.product_id} item={item} />
+            <CartItemRow
+              key={item.product_id}
+              item={item}
+              onEditQty={it => { setEditingCartItem(it); setEditQtyValue(it.qty); }}
+            />
           ))}
         </div>
 
@@ -499,35 +519,71 @@ export default function POSPage() {
                 </select>
               </div>
 
-              {/* Payment Amounts */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 rounded-xl bg-[var(--clr-surface-2)] border" style={{ borderColor: 'var(--clr-border)' }}>
-                  <label className="label font-bold text-xs mb-1.5 flex items-center gap-1.5 text-emerald-400">
-                    <Banknote size={15} /> المبلغ نقداً (ج.م)
-                  </label>
-                  <input
-                    type="number"
-                    className="input w-full font-mono font-bold text-base text-emerald-400"
-                    value={cashAmount}
-                    onChange={e => setCashAmount(Number(e.target.value))}
-                    min={0}
-                    step={0.5}
-                  />
-                </div>
-                <div className="p-3 rounded-xl bg-[var(--clr-surface-2)] border" style={{ borderColor: 'var(--clr-border)' }}>
-                  <label className="label font-bold text-xs mb-1.5 flex items-center gap-1.5 text-cyan-400">
-                    <CreditCard size={15} /> كارت / محفظة (ج.م)
-                  </label>
-                  <input
-                    type="number"
-                    className="input w-full font-mono font-bold text-base text-cyan-400"
-                    value={cardAmount}
-                    onChange={e => setCardAmount(Number(e.target.value))}
-                    min={0}
-                    step={0.5}
-                  />
+              {/* Payment Mode Presets */}
+              <div>
+                <label className="label font-bold text-xs mb-1.5 text-[var(--clr-text)]">طريقة السداد السريعة:</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    className={`py-2 px-3 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
+                      cashAmount >= cart.total()
+                        ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50 shadow-sm'
+                        : 'bg-[var(--clr-surface-2)] text-[var(--clr-muted)] border-[var(--clr-border)] hover:text-white'
+                    }`}
+                    onClick={() => { setCashAmount(cart.total()); setCardAmount(0); }}
+                  >
+                    💵 سداد الفاتورة بالكامل
+                  </button>
+                  <button
+                    type="button"
+                    className={`py-2 px-3 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
+                      cashAmount === 0
+                        ? 'bg-amber-500/20 text-amber-400 border-amber-500/50 shadow-sm'
+                        : 'bg-[var(--clr-surface-2)] text-[var(--clr-muted)] border-[var(--clr-border)] hover:text-white'
+                    }`}
+                    onClick={() => { setCashAmount(0); setCardAmount(0); }}
+                  >
+                    📝 بيع آجل بالكامل (على الحساب)
+                  </button>
                 </div>
               </div>
+
+              {/* Payment Amount */}
+              <div className="p-3 rounded-xl bg-[var(--clr-surface-2)] border" style={{ borderColor: 'var(--clr-border)' }}>
+                <label className="label font-bold text-xs mb-1.5 flex items-center gap-1.5 text-emerald-400">
+                  <Banknote size={15} /> المبلغ المدفوع الآن (ج.م)
+                </label>
+                <input
+                  type="number"
+                  className="input w-full font-mono font-bold text-lg text-emerald-400"
+                  value={cashAmount}
+                  onChange={e => { setCashAmount(Number(e.target.value)); setCardAmount(0); }}
+                  min={0}
+                  step={0.5}
+                />
+              </div>
+
+              {/* Deferred Sale Accounting Notice */}
+              {totalPaid < cart.total() && (
+                <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex flex-col gap-2">
+                  <div className="flex items-center justify-between text-amber-400 font-bold text-xs">
+                    <span className="flex items-center gap-1.5">
+                      <CreditCard size={15} />
+                      تسجيل بيع آجل (على حساب العميل)
+                    </span>
+                    <span className="font-mono text-sm">{formatEGP(cart.total() - totalPaid)}</span>
+                  </div>
+                  <p className="text-[11px] text-amber-200/90 leading-relaxed m-0">
+                    سيتم ترحيل مبلغ <strong className="text-amber-300">{formatEGP(cart.total() - totalPaid)}</strong> آلياً كدين على حساب العميل، ويضاف إلى قائمة المركز المالي تحت بند <strong>(العملاء والمدينون - الأصول المتداولة)</strong> حسب معايير المحاسبة.
+                  </p>
+                  {!cart.customerId && (
+                    <div className="mt-1 p-2 rounded-lg bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs font-bold flex items-center gap-1.5">
+                      <AlertCircle size={15} className="shrink-0 text-rose-400" />
+                      <span>تنبيه: يجب اختيار عميل مسجل أعلى الشاشة لتأكيد البيع الآجل!</span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Summary Card */}
               <div className="glass-surface p-4 rounded-xl border flex flex-col gap-2.5 text-sm" style={{ borderColor: 'var(--clr-border)' }}>
@@ -540,20 +596,30 @@ export default function POSPage() {
                   <span className="font-bold font-mono text-sm text-emerald-400">{formatEGP(totalPaid)}</span>
                 </div>
                 <div className="flex justify-between items-center text-base font-bold border-t pt-2 mt-1" style={{ borderColor: 'var(--clr-border)' }}>
-                  <span>المتبقي للعميل (الباقي):</span>
-                  <span className="font-mono text-lg" style={{ color: change >= 0 ? 'var(--clr-success)' : 'var(--clr-danger)' }}>
-                    {formatEGP(Math.max(0, change))}
+                  <span>{totalPaid < cart.total() ? 'المتبقي كـ بيع آجل:' : 'المتبقي للعميل (الباقي):'}</span>
+                  <span className="font-mono text-lg" style={{ color: totalPaid < cart.total() ? 'var(--clr-warning)' : change >= 0 ? 'var(--clr-success)' : 'var(--clr-danger)' }}>
+                    {totalPaid < cart.total() ? formatEGP(cart.total() - totalPaid) : formatEGP(Math.max(0, change))}
                   </span>
                 </div>
               </div>
 
               <button
                 id="confirm-sale-btn"
-                className="btn-primary w-full py-3.5 text-base font-bold shadow-xl cursor-pointer"
+                className={`w-full py-3.5 text-base font-bold shadow-xl cursor-pointer rounded-xl transition-all ${
+                  totalPaid < cart.total()
+                    ? 'bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white'
+                    : 'btn-primary'
+                }`}
                 onClick={handleCheckout}
-                disabled={loading || totalPaid < cart.total()}
+                disabled={loading || (totalPaid < cart.total() && !cart.customerId)}
               >
-                {loading ? 'جاري الحفظ والترحيل...' : <><Check size={20} /> تأكيد وإتمام العملية 🚀</>}
+                {loading ? (
+                  'جاري الحفظ والترحيل...'
+                ) : totalPaid < cart.total() ? (
+                  <><Check size={20} /> تأكيد وإتمام البيع الآجل على العميل 🚀</>
+                ) : (
+                  <><Check size={20} /> تأكيد وإتمام العملية 🚀</>
+                )}
               </button>
             </div>
           </div>
@@ -666,6 +732,115 @@ export default function POSPage() {
               <button className="btn-secondary" onClick={() => setShowReceipt(false)}>
                 إغلاق
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Quantity Modal */}
+      {editingCartItem && (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setEditingCartItem(null) }}>
+          <div className="modal-content" style={{ maxWidth: 420 }}>
+            <div className="flex items-center justify-between mb-4 border-b pb-3" style={{ borderColor: 'var(--clr-border)' }}>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-[var(--clr-primary)]/20 flex items-center justify-center text-[var(--clr-primary)]">
+                  <Edit3 size={18} />
+                </div>
+                <h3 className="text-lg font-bold text-[var(--clr-text)]">تعديل العدد / الكمية للمنتج</h3>
+              </div>
+              <button className="btn-icon" onClick={() => setEditingCartItem(null)}><X size={16} /></button>
+            </div>
+
+            <div className="flex flex-col gap-4">
+              <div className="p-3.5 rounded-xl bg-[var(--clr-surface-2)] border flex flex-col gap-1.5" style={{ borderColor: 'var(--clr-border)' }}>
+                <span className="font-bold text-base text-[var(--clr-text)]">{editingCartItem.name_ar}</span>
+                {editingCartItem.brand_name && <span className="text-xs text-[var(--clr-muted)]">{editingCartItem.brand_name}</span>}
+                <div className="flex justify-between items-center text-xs text-[var(--clr-muted)] mt-2 pt-2 border-t" style={{ borderColor: 'var(--clr-border)' }}>
+                  <span>سعر الوحدة: <strong className="text-[var(--clr-primary)] font-mono text-sm">{formatEGP(editingCartItem.unit_price)}</strong></span>
+                  <span>العدد بالسلة حالياً: <strong className="font-mono text-white text-sm">{editingCartItem.qty}</strong></span>
+                </div>
+              </div>
+
+              <div>
+                <label className="label font-bold text-xs mb-2 text-[var(--clr-text)]">إدخال العدد الجديد المطلوب:</label>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="btn-secondary px-4 py-2 text-xl font-bold rounded-xl cursor-pointer"
+                    onClick={() => setEditQtyValue(prev => Math.max(1, prev - 1))}
+                  >
+                    -
+                  </button>
+                  <input
+                    type="number"
+                    className="input w-full text-center font-mono font-bold text-2xl text-[var(--clr-primary)] py-2 rounded-xl"
+                    value={editQtyValue}
+                    onChange={e => setEditQtyValue(Math.max(1, parseInt(e.target.value) || 1))}
+                    min={1}
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    className="btn-secondary px-4 py-2 text-xl font-bold rounded-xl cursor-pointer"
+                    onClick={() => setEditQtyValue(prev => prev + 1)}
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+
+              {/* Quick Presets */}
+              <div>
+                <label className="label font-bold text-xs mb-1.5 text-[var(--clr-muted)]">خيارات سريعة للعدد:</label>
+                <div className="grid grid-cols-5 gap-2">
+                  {[1, 2, 3, 5, 10].map(n => (
+                    <button
+                      key={n}
+                      type="button"
+                      className={`py-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+                        editQtyValue === n
+                          ? 'bg-[var(--clr-primary)] text-white border-[var(--clr-primary)] shadow-md'
+                          : 'bg-[var(--clr-surface-2)] text-[var(--clr-text)] border-[var(--clr-border)] hover:bg-[var(--clr-surface-1)]'
+                      }`}
+                      onClick={() => setEditQtyValue(n)}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="glass-surface p-3.5 rounded-xl flex justify-between items-center text-sm font-bold border" style={{ borderColor: 'var(--clr-border)' }}>
+                <span>إجمالي الصنف بالعدد الجديد:</span>
+                <span className="font-mono text-emerald-400 text-lg">
+                  {formatEGP(editingCartItem.unit_price * editQtyValue - (editingCartItem.discount || 0))}
+                </span>
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  className="btn-primary flex-1 py-3 text-base font-bold cursor-pointer flex items-center justify-center gap-1.5"
+                  onClick={() => {
+                    if (editQtyValue <= 0) {
+                      toast.error('الكمية يجب أن تكون 1 أو أكثر');
+                      return;
+                    }
+                    cart.updateQty(editingCartItem.product_id, editQtyValue);
+                    setEditingCartItem(null);
+                    toast.success(`تم تحديث العدد إلى ${editQtyValue}`);
+                  }}
+                >
+                  <Check size={18} /> حفظ وتحديث العدد
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary py-3 px-5 font-bold cursor-pointer"
+                  onClick={() => setEditingCartItem(null)}
+                >
+                  إلغاء
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1017,7 +1192,7 @@ function SalesHistoryModal({
             </div>
             <div>
               <h3 className="text-xl font-bold text-[var(--clr-text)]">
-                حركة المبيعات وفواتير اليوم والفترة
+                حركة المبيعات والفواتير
               </h3>
               <p className="text-xs text-[var(--clr-muted)] mt-0.5">
                 استعراض فواتير البيع ومجموعات الإيراد للمدة الزمنية المحددة تلقائياً
@@ -1288,15 +1463,25 @@ function SalesHistoryModal({
 
                       {/* Action */}
                       <td className="text-center">
-                        <button
-                          type="button"
-                          onClick={() => onOpenDetail(s)}
-                          className="btn-icon text-xs px-2.5 py-1 inline-flex items-center gap-1 font-bold cursor-pointer"
-                          title="عرض تفاصيل الفاتورة كاملة"
-                        >
-                          <Eye size={14} className="text-[var(--clr-primary)]" />
-                          تفاصيل
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => onOpenDetail(s)}
+                            className="btn-secondary text-xs px-2.5 py-1 inline-flex items-center gap-1 font-bold cursor-pointer"
+                            title="عرض تفاصيل الفاتورة كاملة"
+                          >
+                            <Eye size={14} className="text-[var(--clr-primary)]" />
+                            تفاصيل
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-secondary text-xs px-2.5 py-1 font-bold cursor-pointer flex items-center gap-1 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
+                            onClick={() => shareSaleReceiptWhatsApp(s, 'متجر XPhone', s.customer_phone)}
+                            title="إرسال وتعديل فاتورة البيع المحددة للعميل عبر نافذة الواتساب الجانبية المنبثقة"
+                          >
+                            💬 واتساب
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )
@@ -1434,13 +1619,23 @@ function SaleDetailModal({ sale, storeSettings, onClose, onPrintReceipt }: any) 
 
         {/* Action Buttons */}
         <div className="flex justify-between items-center pt-3 border-t" style={{ borderColor: 'var(--clr-border)' }}>
-          <button
-            type="button"
-            onClick={() => onPrintReceipt(sale)}
-            className="btn-primary flex items-center gap-2 font-bold px-4 py-2 cursor-pointer"
-          >
-            <Printer size={16} /> طباعة إيصال الفاتورة
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => onPrintReceipt(sale)}
+              className="btn-primary flex items-center gap-2 font-bold px-4 py-2 cursor-pointer"
+            >
+              <Printer size={16} /> طباعة إيصال الفاتورة
+            </button>
+            <button
+              type="button"
+              className="btn-secondary text-xs px-3.5 py-2 font-bold cursor-pointer flex items-center gap-1.5 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
+              onClick={() => shareSaleReceiptWhatsApp(sale, 'متجر XPhone', sale.customer_phone)}
+              title="إرسال إيصال الفاتورة للعميل عبر نافذة الواتساب الجانبية"
+            >
+              💬 إرسال عبر WhatsApp
+            </button>
+          </div>
 
           <button type="button" className="btn-secondary" onClick={onClose}>إغلاق</button>
         </div>
@@ -1458,27 +1653,64 @@ function ShoppingCartEmpty() {
   )
 }
 
-function CartItemRow({ item }: { item: any }) {
+function CartItemRow({ item, onEditQty }: { item: any; onEditQty: (item: any) => void }) {
   const cart = useCartStore()
   return (
-    <div className="glass-surface p-3 flex flex-col gap-2">
+    <div className="glass-surface p-3 flex flex-col gap-2 rounded-xl border" style={{ borderColor: 'var(--clr-border)' }}>
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           <div className="text-sm font-semibold truncate">{item.name_ar}</div>
           {item.brand_name && <span dir="ltr" className="text-xs" style={{ color: 'var(--clr-muted)' }}>{item.brand_name}</span>}
         </div>
-        <button className="btn-icon p-1 border-0" style={{ background: 'none', color: 'var(--clr-danger)' }}
-          onClick={() => cart.removeItem(item.product_id)}>
-          <Trash2 size={14} />
+        <button
+          className="btn-icon p-1 border-0 hover:bg-rose-500/10 rounded transition-colors cursor-pointer"
+          style={{ background: 'none', color: 'var(--clr-danger)' }}
+          onClick={() => cart.removeItem(item.product_id)}
+          title="حذف من السلة"
+        >
+          <Trash2 size={15} />
         </button>
       </div>
+
+      {/* Quantity & Unit Price Row */}
       <div className="flex items-center justify-between gap-2 border-t pt-2 mt-1" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
-        <div className="flex items-center gap-1.5">
+        {/* Quantity adjustment buttons + modal opener */}
+        <div className="flex items-center gap-1 bg-[var(--clr-surface-2)] p-0.5 rounded-lg border border-[var(--clr-border)]">
+          <button
+            type="button"
+            className="w-6 h-6 flex items-center justify-center rounded text-xs font-bold bg-[var(--clr-surface-1)] hover:bg-[var(--clr-primary)] hover:text-white transition-colors cursor-pointer"
+            onClick={() => cart.updateQty(item.product_id, item.qty - 1)}
+            title="تقليل العدد"
+          >
+            -
+          </button>
+          <button
+            type="button"
+            className="px-2 py-0.5 text-xs font-bold font-mono text-[var(--clr-primary)] hover:underline flex items-center gap-1 cursor-pointer"
+            onClick={() => onEditQty(item)}
+            title="انقر لتعديل العدد عبر نافذة مخصصة"
+          >
+            <span className="text-[var(--clr-muted)] text-[10px]">العدد:</span>
+            <span>{item.qty}</span>
+            <Edit3 size={11} className="opacity-75" />
+          </button>
+          <button
+            type="button"
+            className="w-6 h-6 flex items-center justify-center rounded text-xs font-bold bg-[var(--clr-surface-1)] hover:bg-[var(--clr-primary)] hover:text-white transition-colors cursor-pointer"
+            onClick={() => cart.updateQty(item.product_id, item.qty + 1)}
+            title="زيادة العدد"
+          >
+            +
+          </button>
+        </div>
+
+        {/* Unit Price input */}
+        <div className="flex items-center gap-1">
           <span className="text-xs" style={{ color: 'var(--clr-muted)' }}>السعر:</span>
           <input
             type="number"
             className="input py-0.5 px-2 text-xs font-bold text-center"
-            style={{ width: 85, height: 26, background: 'rgba(255,255,255,0.03)', color: 'var(--clr-primary)' }}
+            style={{ width: 75, height: 26, background: 'rgba(255,255,255,0.03)', color: 'var(--clr-primary)' }}
             value={item.unit_price}
             onChange={e => {
               const val = Number(e.target.value)
@@ -1493,9 +1725,13 @@ function CartItemRow({ item }: { item: any }) {
             step={1}
           />
         </div>
-        <div className="font-bold text-sm" style={{ color: 'var(--clr-primary)' }}>
+      </div>
+
+      <div className="flex items-center justify-between text-xs pt-1 border-t" style={{ borderColor: 'rgba(255,255,255,0.04)' }}>
+        <span style={{ color: 'var(--clr-muted)' }}>إجمالي الصنف:</span>
+        <span className="font-bold text-sm font-mono" style={{ color: 'var(--clr-primary)' }}>
           {formatEGP(item.unit_price * item.qty - item.discount)}
-        </div>
+        </span>
       </div>
     </div>
   )

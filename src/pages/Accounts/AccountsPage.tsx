@@ -53,6 +53,7 @@ export default function AccountsPage() {
   const [transferFrom, setTransferFrom] = useState('')
   const [transferTo, setTransferTo] = useState('')
   const [transferAmount, setTransferAmount] = useState('')
+  const [transferFee, setTransferFee] = useState('')
   const [transferNotes, setTransferNotes] = useState('')
   const [savingTransfer, setSavingTransfer] = useState(false)
 
@@ -151,6 +152,7 @@ export default function AccountsPage() {
   const handleTransfer = async (e: React.FormEvent) => {
     e.preventDefault()
     const amt = parseFloat(transferAmount)
+    const fee = transferFee ? parseFloat(transferFee) : 0
     if (!transferFrom || !transferTo) {
       return toast.error('يرجى اختيار الحساب المحول منه والمحول إليه')
     }
@@ -160,25 +162,31 @@ export default function AccountsPage() {
     if (!amt || amt <= 0) {
       return toast.error('يرجى إدخال مبلغ صحيح للتحويل')
     }
+    if (fee < 0) {
+      return toast.error('لا يمكن أن تكون عمولة التحويل سالبة')
+    }
 
+    const totalRequired = amt + fee
     const sourceAcc = accounts.find(a => a.id === transferFrom)
-    if (sourceAcc && sourceAcc.balance < amt) {
-      return toast.error(`رصيد الحساب المحول منه (${formatEGP(sourceAcc.balance)}) لا يكفي لإتمام التحويل`)
+    if (sourceAcc && sourceAcc.balance < totalRequired) {
+      return toast.error(`رصيد الحساب المحول منه (${formatEGP(sourceAcc.balance)}) لا يكفي للمبلغ والعمولة (${formatEGP(totalRequired)})`)
     }
 
     setSavingTransfer(true)
-    const t = toast.loading('جاري تنفيذ التحويل المالي...')
+    const t = toast.loading('جاري تنفيذ التحويل المالي وقيد العمولة بالمصروفات...')
     try {
       await transferFinancialAmount({
         from_account_id: transferFrom,
         to_account_id: transferTo,
         amount: amt,
+        fee: fee > 0 ? fee : null,
         notes: transferNotes.trim() || null,
         user_id: null,
       })
-      toast.success('تم تنفيذ التحويل وتحديث الأرصدة بنجاح!', { id: t })
+      toast.success(fee > 0 ? 'تم تنفيذ التحويل وقيد عمولة التحويل بالمصروفات بنجاح!' : 'تم تنفيذ التحويل وتحديث الأرصدة بنجاح!', { id: t })
       setShowTransferModal(false)
       setTransferAmount('')
+      setTransferFee('')
       setTransferNotes('')
       loadData()
     } catch (err: any) {
@@ -253,6 +261,7 @@ export default function AccountsPage() {
       setTransferFrom(other ? other.id : '')
     }
     setTransferAmount('')
+    setTransferFee('')
     setTransferNotes('')
     setShowTransferModal(true)
   }
@@ -972,36 +981,81 @@ export default function AccountsPage() {
                 </select>
               </div>
 
-              <div>
-                <label className="label font-bold text-xs">المبلغ المراد تحويله (ج.م) *</label>
-                <input
-                  type="number"
-                  step="any"
-                  min="0.5"
-                  className="input w-full font-mono font-bold text-lg"
-                  value={transferAmount}
-                  onChange={e => setTransferAmount(e.target.value)}
-                  placeholder="0.00"
-                  required
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="label font-bold text-xs">المبلغ المراد تحويله (ج.م) *</label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0.5"
+                    className="input w-full font-mono font-bold text-lg text-emerald-400"
+                    value={transferAmount}
+                    onChange={e => setTransferAmount(e.target.value)}
+                    placeholder="0.00"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="label font-bold text-xs flex items-center justify-between">
+                    <span>عمولة التحويل / مصاريف بنكية:</span>
+                    <span className="text-[10px] text-amber-400 font-bold">(تُسجل كمصروف)</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    className="input w-full font-mono font-bold text-lg text-amber-400"
+                    value={transferFee}
+                    onChange={e => setTransferFee(e.target.value)}
+                    placeholder="0.00"
+                  />
+                </div>
               </div>
 
+              {/* Live Financial Breakdown Summary */}
+              {parseFloat(transferAmount) > 0 && (
+                <div className="p-3 rounded-xl bg-white/5 border border-white/10 space-y-1.5 text-xs">
+                  <div className="flex justify-between items-center text-[var(--clr-muted)]">
+                    <span>المبلغ المستلم بالحساب الهدف:</span>
+                    <span className="font-mono font-bold text-emerald-400">+{formatEGP(parseFloat(transferAmount) || 0)}</span>
+                  </div>
+                  {parseFloat(transferFee) > 0 && (
+                    <div className="flex justify-between items-center text-amber-300">
+                      <span>عمولة التحويل (مصروف بنكي مباشر):</span>
+                      <span className="font-mono font-bold">-{formatEGP(parseFloat(transferFee) || 0)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between items-center pt-1.5 border-t border-white/10 font-bold text-[var(--clr-text)]">
+                    <span>إجمالي الخصم من الحساب المصدر:</span>
+                    <span className="font-mono font-black text-red-400">
+                      -{formatEGP((parseFloat(transferAmount) || 0) + (parseFloat(transferFee) || 0))}
+                    </span>
+                  </div>
+                  {parseFloat(transferFee) > 0 && (
+                    <p className="text-[10px] text-cyan-300 pt-1">
+                      💡 سيتم ترحيل العمولة تلقائياً كقيد مصروفات إلى <b>قائمة المصروفات</b> و<b>دفتر أستاذ المصروفات</b>.
+                    </p>
+                  )}
+                </div>
+              )}
+
               <div>
-                <label className="label font-bold text-xs">ملاحظات التحويل:</label>
+                <label className="label font-bold text-xs">ملاحظات وبيان التحويل:</label>
                 <input
                   type="text"
                   className="input w-full text-xs"
                   value={transferNotes}
                   onChange={e => setTransferNotes(e.target.value)}
-                  placeholder="مثال: تغذية رصيد المحفظة من الخزينة الرئيسية"
+                  placeholder="مثال: تحويل تغذية رصيد المحفظة من الخزينة الرئيسية"
                 />
               </div>
 
               <div className="flex gap-2.5 pt-3 border-t mt-1" style={{ borderColor: 'var(--clr-border)' }}>
-                <button type="button" className="btn-secondary flex-1 py-2.5 font-bold" onClick={() => setShowTransferModal(null)} disabled={savingTransfer}>
+                <button type="button" className="btn-secondary flex-1 py-2.5 font-bold cursor-pointer" onClick={() => setShowTransferModal(null)} disabled={savingTransfer}>
                   إلغاء
                 </button>
-                <button type="submit" className="btn-primary flex-1 py-2.5 font-bold shadow-lg" disabled={savingTransfer}>
+                <button type="submit" className="btn-primary flex-1 py-2.5 font-bold shadow-lg cursor-pointer" disabled={savingTransfer}>
                   {savingTransfer ? 'جاري التحويل...' : 'تأكيد عملية التحويل'}
                 </button>
               </div>

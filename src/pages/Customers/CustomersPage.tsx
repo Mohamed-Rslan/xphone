@@ -4,6 +4,7 @@ import { getCustomers, getCustomersReport, createCustomer, updateCustomer, getCu
 import { formatEGP, formatDate } from '../../lib/utils'
 import { exportCustomersExcel } from '../../lib/excel'
 import SettleCustomerInvoicesModal from '../../components/SettleCustomerInvoicesModal'
+import ExportReportModal from '../../components/ExportReportModal'
 import toast from 'react-hot-toast'
 
 export default function CustomersPage() {
@@ -15,6 +16,7 @@ export default function CustomersPage() {
   const [history, setHistory] = useState<any>(null)
   const [showSettleModal, setShowSettleModal] = useState(false)
   const [settleCustomerId, setSettleCustomerId] = useState<string | undefined>(undefined)
+  const [showExportModal, setShowExportModal] = useState(false)
 
   const load = (q?: string) => getCustomers(q).then(setCustomers).catch(console.error)
   useEffect(() => { load() }, [])
@@ -52,7 +54,7 @@ export default function CustomersPage() {
             type="button"
             className="btn-secondary flex items-center gap-2 text-xs py-2 px-3.5 font-bold cursor-pointer shadow-sm hover:scale-[1.01] transition-transform"
             style={{ borderColor: 'rgba(59,130,246,0.4)', color: '#60a5fa' }}
-            onClick={handleExportCustomersExcel}
+            onClick={() => setShowExportModal(true)}
             title="تصدير تقرير تعاملات ومسحوبات العملاء لملف Excel"
           >
             <FileSpreadsheet size={15} className="text-blue-400" />
@@ -159,6 +161,20 @@ export default function CustomersPage() {
           }} />
       )}
 
+      {/* Export Sub-Modal */}
+      {showExportModal && (
+        <ExportReportModal
+          title="استخراج تقرير أرصدة وتفريغ تعاملات العملاء لـ Excel"
+          description="حدد الفترة الزمنية لتوليد تقرير شامل بأرصدة العملاء والمسحوبات والمبيعات الآجلة والسدادات"
+          onClose={() => setShowExportModal(false)}
+          onExport={async (df, dt) => {
+            const reportData = await getCustomersReport(df, dt)
+            return await exportCustomersExcel(reportData || [], df, dt)
+          }}
+        />
+      )}
+
+      {/* Customer History Modal */}
       {selected && history && (
         <CustomerHistoryModal customer={selected} history={history} onClose={() => { setSelected(null); setHistory(null) }} />
       )}

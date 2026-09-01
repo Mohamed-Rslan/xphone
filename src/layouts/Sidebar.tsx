@@ -38,7 +38,7 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ currentPage, onNavigate, isOpen }: SidebarProps) {
-  const { storeLogo, storeName } = useSettingsStore()
+  const { storeLogo, storeName, storeTagline } = useSettingsStore()
   const { hasPermission } = useAuthStore()
 
   const allowedNavItems = NAV_ITEMS.filter(item => {
@@ -82,9 +82,11 @@ export default function Sidebar({ currentPage, onNavigate, isOpen }: SidebarProp
             <div className="font-black text-lg leading-tight truncate max-w-[170px]" style={{ color: 'var(--clr-text)' }}>
               {storeName || 'XPhone'}
             </div>
-            <div className="text-xs font-bold text-amber-400 mt-0.5">
-              إدارة المتجر والنظام
-            </div>
+            {storeTagline && (
+              <div className="text-[11px] font-bold text-amber-400 mt-0.5 truncate max-w-[170px]">
+                {storeTagline}
+              </div>
+            )}
           </div>
         )}
       </div>

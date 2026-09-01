@@ -83,7 +83,7 @@ export default function ExportReportModal({
   }
 
   return (
-    <div className="modal-backdrop">
+    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div
         className="modal-content animate-scale-in"
         style={{ width: '92vw', maxWidth: '640px', padding: '24px' }}

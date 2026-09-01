@@ -1,7 +1,8 @@
 import * as XLSX from 'xlsx-js-style'
 import {
   getExpenses, getProfitLoss, getRepairJobs, getMonetaryTransactions,
-  getSales, getPurchaseOrders, getCashMovementsReport, getDamagedGoods
+  getSales, getPurchaseOrders, getCashMovementsReport, getDamagedGoods,
+  getFinancialAccounts
 } from './commands'
 import { formatEGP, formatDate, formatDateTime, today } from './utils'
 import { useSettingsStore } from '../store/settingsStore'
@@ -147,8 +148,9 @@ function buildFormattedSheet(
   summaryCardText?: string
 ) {
   const titleCell = { v: `📊 ${title}`, t: 's', s: styles.title }
+  const periodText = `📅 فترة التقرير: من ${dateFrom} إلى ${dateTo}   |   تاريخ الاستخراج: ${today()}   |   نظام XPhone Store`
   const subtitleCell = {
-    v: summaryCardText || `الفترة من: ${dateFrom} إلى: ${dateTo}   |   تاريخ الاستخراج: ${today()}   |   نظام XPhone Store`,
+    v: summaryCardText ? `${periodText}   —   ${summaryCardText}` : periodText,
     t: 's',
     s: styles.subtitle
   }
@@ -597,89 +599,97 @@ export async function exportPeriodRepairsReport(dateFrom: string, dateTo: string
   const jobs = await getRepairJobs({ date_from: dateFrom, date_to: dateTo })
   const wb = XLSX.utils.book_new()
 
-  let totalLabor = 0
-  let totalParts = 0
-  let totalCostToCustomer = 0
-  let totalPaid = 0
+  let totalCustomerPrice = 0
+  let totalRepairCost = 0
   let totalRepairProfit = 0
 
   const headers = [
-    "م", "رقم الإيصال", "تاريخ الاستلام", "اسم العميل", "الهاتف",
-    "الجهاز والماركة", "المشكلة / العطل", "الحالة",
-    "تكلفة قطع الغيار", "أجرة اليد / المصنعية", "إجمالي التكلفة", "المدفوع", "صافي ربح الصيانة"
+    "م",
+    "رقم الفاتورة / التذكرة",
+    "تاريخ الاستلام",
+    "تاريخ التسليم الفعلي",
+    "اسم العميل",
+    "رقم الهاتف",
+    "اسم القائم بالصيانة (الفني)",
+    "الجهاز والموديل",
+    "وصف العطل",
+    "سعر الصيانة (على العميل)",
+    "إجمالي تكلفة الصيانة (على المتجر)",
+    "الربح من الصيانة (صافي الربح)",
+    "حالة الصيانة"
   ]
 
   const dataRows: any[][] = (jobs || []).map((j: any, idx: number) => {
-    const labor = j.labor_cost || 0
+    const price = j.amount_paid || 0
     const parts = j.parts_cost || 0
-    const total = j.total_cost || (labor + parts)
-    const paid = j.amount_paid || 0
-    const profit = labor // Labor is pure service profit
+    const labor = j.labor_cost || 0
+    const delivery = j.delivery_cost || 0
+    const cost = j.total_cost || (parts + labor + delivery)
+    const profit = j.repair_profit !== undefined ? j.repair_profit : (price - cost)
 
-    totalLabor += labor
-    totalParts += parts
-    totalCostToCustomer += total
-    totalPaid += paid
+    totalCustomerPrice += price
+    totalRepairCost += cost
     totalRepairProfit += profit
 
     const statusObj =
-      j.status === 'delivered' ? { text: 'تم التسليم', style: styles.positive } :
-      j.status === 'repaired' ? { text: 'تم الإصلاح', style: styles.positive } :
-      j.status === 'in_progress' ? { text: 'جاري العمل', style: styles.warning } :
-      j.status === 'cancelled' ? { text: 'ملغى / مرتجع', style: styles.negative } :
-      { text: 'قيد الانتظار', style: styles.dataEven }
+      j.status === 'delivered' ? { text: '✅ تم التسليم', style: styles.positive } :
+      j.status === 'repaired' ? { text: '🎉 تم الإصلاح', style: styles.positive } :
+      j.status === 'in_progress' ? { text: '⚙️ جاري العمل', style: styles.warning } :
+      j.status === 'cancelled' ? { text: '❌ ملغى / متعذر', style: styles.negative } :
+      { text: '📥 تم الاستلام', style: styles.dataEven }
 
     return [
       idx + 1,
       j.job_no,
       formatDate(j.received_at),
+      j.delivered_at ? formatDate(j.delivered_at) : 'لم يُسلّم بعد',
       j.customer_name,
       j.customer_phone || '—',
+      j.technician_name || 'فني الصيانة المسؤول',
       `${j.device_brand_name || ''} ${j.device_model || ''}`.trim() || '—',
       j.fault_desc || '—',
-      { v: statusObj.text, t: 's', s: statusObj.style },
-      parts,
-      labor,
-      total,
-      paid,
-      { v: profit, t: 'n', s: styles.positive }
+      price,
+      cost,
+      { v: profit, t: 'n', s: profit >= 0 ? styles.positive : styles.negative },
+      { v: statusObj.text, t: 's', s: statusObj.style }
     ]
   })
 
   // Grand Totals Row
   dataRows.push([
     { v: "الإجمالي", t: 's', s: styles.totalRow },
-    { v: `عدد الأجهزة: ${jobs.length}`, t: 's', s: styles.totalRow },
+    { v: `عدد التذاكر: ${jobs.length}`, t: 's', s: styles.totalRow },
     { v: "—", t: 's', s: styles.totalRow },
     { v: "—", t: 's', s: styles.totalRow },
     { v: "—", t: 's', s: styles.totalRow },
     { v: "—", t: 's', s: styles.totalRow },
     { v: "—", t: 's', s: styles.totalRow },
     { v: "—", t: 's', s: styles.totalRow },
-    { v: totalParts, t: 'n', s: styles.totalRow },
-    { v: totalLabor, t: 'n', s: styles.totalRow },
-    { v: totalCostToCustomer, t: 'n', s: styles.totalRow },
-    { v: totalPaid, t: 'n', s: styles.totalRow },
-    { v: totalRepairProfit, t: 'n', s: styles.totalRow }
+    { v: "—", t: 's', s: styles.totalRow },
+    { v: totalCustomerPrice, t: 'n', s: styles.totalRow },
+    { v: totalRepairCost, t: 'n', s: styles.totalRow },
+    { v: totalRepairProfit, t: 'n', s: styles.totalRow },
+    { v: "صافي ربح الصيانة المعتمد", t: 's', s: styles.totalRow }
   ])
 
   const ws = buildFormattedSheet(
-    "تقرير خدمات وعمليات الصيانة مع الإجماليات",
+    `تقرير حركات وتكاليف وأرباح الصيانة عن الفترة من ${dateFrom} إلى ${dateTo}`,
     dateFrom,
     dateTo,
     headers,
     dataRows,
     [
-      { wch: 6 }, { wch: 16 }, { wch: 16 }, { wch: 22 }, { wch: 16 },
-      { wch: 24 }, { wch: 28 }, { wch: 16 },
-      { wch: 16 }, { wch: 18 }, { wch: 16 }, { wch: 16 }, { wch: 18 }
-    ]
+      { wch: 6 }, { wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 22 },
+      { wch: 16 }, { wch: 22 }, { wch: 24 }, { wch: 28 },
+      { wch: 20 }, { wch: 22 }, { wch: 22 }, { wch: 18 }
+    ],
+    `يتضمن تفاصيل الفاتورة، تاريخ الاستلام والتسليم، اسم العميل، اسم القائم بالصيانة (الفني)، سعر الصيانة، إجمالي التكلفة، وصافي الربح`
   )
 
-  XLSX.utils.book_append_sheet(wb, ws, "تقرير الصيانة")
+  XLSX.utils.book_append_sheet(wb, ws, "تقرير عمليات الصيانة")
   wb.Workbook = { Views: [{ RTL: true }] }
 
-  const defaultName = `تقرير_عمليات_الصيانة_عن_الفترة_من_${dateFrom}_إلى_${dateTo}_تاريخ_${today()}.xlsx`
+  const defaultName = `تقرير_عمليات_وتكاليف_وأرباح_الصيانة_من_${dateFrom}_إلى_${dateTo}_تاريخ_${today()}.xlsx`
   return await saveExcelWithDialog(wb, defaultName)
 }
 
@@ -1083,6 +1093,16 @@ export async function exportPeriodCashMovementsExcel(dateFrom: string, dateTo: s
     rep = { movements: [], accounts: [], total_inflow: 0, total_outflow: 0, total_commission: 0, net_cashflow: 0 }
   }
 
+  // Fallback: Ensure financial accounts list is always fetched if missing
+  if (!rep.accounts || rep.accounts.length === 0) {
+    try {
+      rep.accounts = await getFinancialAccounts()
+    } catch (e) {
+      console.error('Fallback getFinancialAccounts error:', e)
+      rep.accounts = []
+    }
+  }
+
   const wb = XLSX.utils.book_new()
 
   // ── Sheet 1: الصفحة الرئيسية (كافة الحركات والإجماليات وسجل السيولة الشامل) ──
@@ -1100,7 +1120,7 @@ export async function exportPeriodCashMovementsExcel(dateFrom: string, dateTo: s
   ]
 
   const movements = rep.movements || []
-  const masterRows = movements.map((m: any, idx: number) => [
+  const masterRows = movements.length > 0 ? movements.map((m: any, idx: number) => [
     idx + 1,
     formatDateTime(m.date),
     m.account_name || 'حساب نقدي',
@@ -1111,7 +1131,20 @@ export async function exportPeriodCashMovementsExcel(dateFrom: string, dateTo: s
     m.commission > 0 ? m.commission : 0,
     m.balance_after,
     m.remaining_limit != null ? m.remaining_limit : "غير محدد"
-  ])
+  ]) : [
+    [
+      1,
+      formatDate(today()),
+      "كافة الحسابات المالية",
+      "لا توجد حركات",
+      `لا توجد حركات نقدية مسجلة خلال الفترة المحددة من ${dateFrom} إلى ${dateTo}`,
+      0,
+      0,
+      0,
+      0,
+      "مفتوح"
+    ]
+  ]
 
   // Summary statistics row
   masterRows.push([
@@ -1461,129 +1494,168 @@ export async function exportShareholderLedgerExcel(
 
 export async function exportExpensesExcel(
   expenses: any[],
-  accruedExpenses: any[],
+  accruedExpenses: any[] = [],
   dateFrom: string,
   dateTo: string
 ): Promise<boolean> {
-  const storeName = 'XPhone Store'
+  const storeName = useSettingsStore.getState().storeName || 'XPhone Store'
   const workbook = XLSX.utils.book_new()
 
-  const totalCash = expenses.reduce((sum, exp) => sum + (exp.amount || 0), 0)
+  // Sort chronologically for running balance ledger calculation
+  const sortedExpenses = [...expenses].sort((a, b) => (a.expense_date || a.created_at || '').localeCompare(b.expense_date || b.created_at || ''))
+  const totalCash = sortedExpenses.reduce((sum, exp) => sum + (exp.amount || 0), 0)
   const unpaidAccrued = accruedExpenses.filter(a => a.status === 'unpaid').reduce((sum, a) => sum + (a.amount || 0), 0)
   const totalAccrued = accruedExpenses.reduce((sum, a) => sum + (a.amount || 0), 0)
 
-  // ── 1. Tab 1: المصروفات النقدية (Cash Expenses) ──
-  const cashHeaders = ['تاريخ المصروف', 'التصنيف', 'البيان والوصف', 'المبلغ (ج.م)', 'طبيعة المصروف', 'حساب الخصم النقدي']
-  const cashRows: any[][] = expenses.map(exp => [
-    formatDate(exp.expense_date) || '—',
-    exp.category_name || 'عام',
-    exp.description || '—',
-    exp.amount || 0,
-    exp.is_recurring ? `دوري (${exp.recurrence || 'monthly'})` : 'عارض',
-    exp.financial_account_name || 'الخزينة الرئيسية',
-  ])
-
-  // Total summary row for Cash Expenses
-  cashRows.push([
-    { v: 'المجموع الإجمالي للمصروفات النقدية', t: 's', s: styles.totalRow },
-    { v: '', t: 's', s: styles.totalRow },
-    { v: '', t: 's', s: styles.totalRow },
-    { v: totalCash, t: 'n', s: styles.totalRow },
-    { v: '', t: 's', s: styles.totalRow },
-    { v: '', t: 's', s: styles.totalRow },
-  ])
-
-  const cashColWidths = [
-    { wch: 18 },
-    { wch: 22 },
-    { wch: 38 },
-    { wch: 20 },
-    { wch: 20 },
-    { wch: 25 },
+  // ── 1. Tab 1: دفتر أستاذ المصروفات والتكاليف (Expenses General Ledger) ──
+  const ledgerHeaders = [
+    'م',
+    'تاريخ القيد / المصروف',
+    'التصنيف المحاسبي',
+    'البيان والشرح المحاسبي',
+    'الحساب النقدي / البنكي المسدد منه',
+    'المبلغ المدين (ج.م)',
+    'الرصيد التراكمي للمصروفات (ج.م)',
+    'طبيعة ونوع القيد'
   ]
 
-  const cashSheet = buildFormattedSheet(
-    `تقرير المصروفات النقدية المسددة — ${storeName}`,
-    formatDate(dateFrom),
-    formatDate(dateTo),
-    cashHeaders,
-    cashRows,
-    cashColWidths,
-    `الفترة من: ${formatDate(dateFrom)} إلى: ${formatDate(dateTo)}   |   إجمالي المصروفات النقدية الخزنية: ${formatEGP(totalCash)}`
-  )
-  XLSX.utils.book_append_sheet(workbook, cashSheet, 'المصروفات النقدية')
+  let runningTotal = 0
+  const ledgerRows: any[][] = sortedExpenses.map((exp, idx) => {
+    const amt = exp.amount || 0
+    runningTotal += amt
+    const isFee = exp.category_name?.includes('عمول') || exp.category_name?.includes('تحويل') || exp.description?.includes('عمولة')
+    const typeLabel = isFee ? 'عمولة تحويل بنكية' : (exp.is_recurring ? `دوري (${exp.recurrence || 'شهري'})` : 'عارض / تشغيلي')
 
-  // ── 2. Tab 2: المصروفات المستحقة والالتزامات (Accrued Expenses) ──
-  const accruedHeaders = ['عنوان / بيان المصروف', 'المبلغ المستحق (ج.م)', 'التصنيف', 'تاريخ الاستحقاق', 'حالة السداد', 'الحساب النقدي المسدد منه']
-  const accruedRows: any[][] = accruedExpenses.map(accr => [
-    accr.title || '—',
-    accr.amount || 0,
-    accr.category_name || 'عام',
-    formatDate(accr.due_date) || 'غير محدد',
-    accr.status === 'paid' ? 'مسدد' : 'مستحق كالتزام',
-    accr.financial_account_name || '—',
-  ])
-
-  accruedRows.push([
-    { v: 'المجموع الكلي للمصروفات المستحقة والالتزامات', t: 's', s: styles.totalRow },
-    { v: totalAccrued, t: 'n', s: styles.totalRow },
-    { v: '', t: 's', s: styles.totalRow },
-    { v: '', t: 's', s: styles.totalRow },
-    { v: '', t: 's', s: styles.totalRow },
-    { v: '', t: 's', s: styles.totalRow },
-  ])
-
-  const accruedColWidths = [
-    { wch: 35 },
-    { wch: 22 },
-    { wch: 22 },
-    { wch: 18 },
-    { wch: 18 },
-    { wch: 25 },
-  ]
-
-  const accruedSheet = buildFormattedSheet(
-    `تقرير المصروفات المستحقة والالتزامات — ${storeName}`,
-    formatDate(dateFrom),
-    formatDate(dateTo),
-    accruedHeaders,
-    accruedRows,
-    accruedColWidths,
-    `الفترة من: ${formatDate(dateFrom)} إلى: ${formatDate(dateTo)}   |   إجمالي الالتزامات المستحقة واجبة السداد: ${formatEGP(unpaidAccrued)}`
-  )
-  XLSX.utils.book_append_sheet(workbook, accruedSheet, 'المصروفات المستحقة')
-
-  // ── 3. Tab 3: الملخص الشامل (Executive Summary) ──
-  const summaryHeaders = ['مؤشر المصروفات والتكلفة', 'القيمة الإجمالية (ج.م)', 'ملاحظات وتفاصيل']
-  const summaryRows: any[][] = [
-    ['إجمالي المصروفات النقدية المسددة من الخزينة والحسابات', totalCash, `${expenses.length} مصروف مسدد`],
-    ['إجمالي المصروفات المستحقة غير المسددة (التزامات)', unpaidAccrued, 'التزامات جارية واجبة السداد'],
-    ['إجمالي المصروفات المستحقة المسددة بالكامل', totalAccrued - unpaidAccrued, 'تم سدادها خصماً من الحسابات'],
-    [
-      { v: 'إجمالي التكلفة الكلية للمصروفات والالتزامات للفترة', t: 's', s: styles.totalRow },
-      { v: totalCash + unpaidAccrued, t: 'n', s: styles.totalRow },
-      { v: 'العبء التكليفي الكلي للفترة الزمنية المحددة', t: 's', s: styles.totalRow },
+    return [
+      idx + 1,
+      formatDate(exp.expense_date || exp.created_at) || '—',
+      exp.category_name || 'مصروف عام',
+      exp.description || '—',
+      exp.financial_account_name || 'الخزينة الرئيسية',
+      { v: amt, t: 'n', s: styles.negative },
+      { v: runningTotal, t: 'n', s: styles.boldData },
+      { v: typeLabel, t: 's', s: isFee ? styles.warning : styles.dataEven },
     ]
-  ]
+  })
 
-  const summaryColWidths = [
-    { wch: 45 },
+  // Total summary row for Expenses Ledger
+  ledgerRows.push([
+    { v: 'الإجمالي العام', t: 's', s: styles.totalRow },
+    { v: `عدد القيود: ${sortedExpenses.length}`, t: 's', s: styles.totalRow },
+    { v: '—', t: 's', s: styles.totalRow },
+    { v: 'إجمالي قيود المصروفات المسددة للفترة', t: 's', s: styles.totalRow },
+    { v: '—', t: 's', s: styles.totalRow },
+    { v: totalCash, t: 'n', s: styles.totalRow },
+    { v: totalCash, t: 'n', s: styles.totalRow },
+    { v: 'إجمالي مدين المصروفات', t: 's', s: styles.totalRow },
+  ])
+
+  const ledgerColWidths = [
+    { wch: 6 },
+    { wch: 18 },
     { wch: 25 },
-    { wch: 35 },
+    { wch: 42 },
+    { wch: 25 },
+    { wch: 18 },
+    { wch: 24 },
+    { wch: 22 },
   ]
 
-  const summarySheet = buildFormattedSheet(
-    `ملخص إجماليات المصروفات والتكلفة — ${storeName}`,
+  const ledgerSheet = buildFormattedSheet(
+    `دفتر أستاذ المصروفات والتكاليف التشغيلية والبنكية — ${storeName}`,
     formatDate(dateFrom),
     formatDate(dateTo),
-    summaryHeaders,
-    summaryRows,
-    summaryColWidths,
-    `تقرير ملخص التكلفة الكلية للفترة من: ${formatDate(dateFrom)} إلى: ${formatDate(dateTo)}`
+    ledgerHeaders,
+    ledgerRows,
+    ledgerColWidths,
+    `الفترة من: ${formatDate(dateFrom)} إلى: ${formatDate(dateTo)}   |   إجمالي المصروفات: ${formatEGP(totalCash)}   |   معتمد وفق القيد المزدوج`
   )
-  XLSX.utils.book_append_sheet(workbook, summarySheet, 'الملخص الشامل')
+  XLSX.utils.book_append_sheet(workbook, ledgerSheet, 'دفتر أستاذ المصروفات')
 
-  const filename = `Expenses_Report_${dateFrom}_to_${dateTo}.xlsx`
+  // ── 2. Tab 2: توزيع وتحليل المصروفات حسب التصنيف (Category Distribution) ──
+  const catMap = new Map<string, { total: number; count: number }>()
+  sortedExpenses.forEach(exp => {
+    const cat = exp.category_name || 'أخرى'
+    const cur = catMap.get(cat) || { total: 0, count: 0 }
+    cur.total += exp.amount || 0
+    cur.count += 1
+    catMap.set(cat, cur)
+  })
+
+  const catHeaders = ['م', 'بند وتصنيف المصروف', 'عدد العمليات', 'إجمالي المبلغ (ج.م)', 'النسبة من إجمالي المصروفات (%)']
+  let catIdx = 1
+  const catRows: any[][] = []
+  catMap.forEach((val, key) => {
+    const pct = totalCash > 0 ? (val.total / totalCash) * 100 : 0
+    catRows.push([
+      catIdx++,
+      key,
+      val.count,
+      val.total,
+      `${pct.toFixed(1)}%`
+    ])
+  })
+  catRows.push([
+    { v: 'الإجمالي', t: 's', s: styles.totalRow },
+    { v: `عدد التصنيفات: ${catMap.size}`, t: 's', s: styles.totalRow },
+    { v: sortedExpenses.length, t: 'n', s: styles.totalRow },
+    { v: totalCash, t: 'n', s: styles.totalRow },
+    { v: '100%', t: 's', s: styles.totalRow },
+  ])
+
+  const catSheet = buildFormattedSheet(
+    `تحليل وتوزيع المصروفات حسب التصنيف المحاسبي — ${storeName}`,
+    formatDate(dateFrom),
+    formatDate(dateTo),
+    catHeaders,
+    catRows,
+    [{ wch: 6 }, { wch: 30 }, { wch: 15 }, { wch: 22 }, { wch: 24 }]
+  )
+  XLSX.utils.book_append_sheet(workbook, catSheet, 'تحليل التصنيفات')
+
+  // ── 3. Tab 3: المصروفات المستحقة والالتزامات (Accrued Expenses) ──
+  if (accruedExpenses && accruedExpenses.length > 0) {
+    const accruedHeaders = ['عنوان / بيان المصروف', 'المبلغ المستحق (ج.م)', 'التصنيف', 'تاريخ الاستحقاق', 'حالة السداد', 'الحساب النقدي المسدد منه']
+    const accruedRows: any[][] = accruedExpenses.map(accr => [
+      accr.title || '—',
+      accr.amount || 0,
+      accr.category_name || 'عام',
+      formatDate(accr.due_date) || 'غير محدد',
+      accr.status === 'paid' ? 'مسدد' : 'مستحق كالتزام',
+      accr.financial_account_name || '—',
+    ])
+
+    accruedRows.push([
+      { v: 'المجموع الكلي للمصروفات المستحقة والالتزامات', t: 's', s: styles.totalRow },
+      { v: totalAccrued, t: 'n', s: styles.totalRow },
+      { v: '', t: 's', s: styles.totalRow },
+      { v: '', t: 's', s: styles.totalRow },
+      { v: '', t: 's', s: styles.totalRow },
+      { v: '', t: 's', s: styles.totalRow },
+    ])
+
+    const accruedColWidths = [
+      { wch: 35 },
+      { wch: 22 },
+      { wch: 22 },
+      { wch: 18 },
+      { wch: 18 },
+      { wch: 25 },
+    ]
+
+    const accruedSheet = buildFormattedSheet(
+      `تقرير المصروفات المستحقة والالتزامات — ${storeName}`,
+      formatDate(dateFrom),
+      formatDate(dateTo),
+      accruedHeaders,
+      accruedRows,
+      accruedColWidths,
+      `الفترة من: ${formatDate(dateFrom)} إلى: ${formatDate(dateTo)}   |   إجمالي الالتزامات المستحقة واجبة السداد: ${formatEGP(unpaidAccrued)}`
+    )
+    XLSX.utils.book_append_sheet(workbook, accruedSheet, 'المصروفات المستحقة')
+  }
+
+  const filename = `دفتر_أستاذ_المصروفات_عن_الفترة_من_${dateFrom}_إلى_${dateTo}.xlsx`
   return await saveExcelWithDialog(workbook, filename)
 }
 
@@ -1935,4 +2007,71 @@ export async function exportNotificationsExcel(notifications: any[]): Promise<bo
 
   const filename = `Notifications_History_${today()}.xlsx`
   return await saveExcelWithDialog(workbook, filename)
+}
+
+/**
+ * Export Accounting Inventory General Ledger (دفتر أستاذ المخزون حسب المعايير المحاسبية)
+ */
+export async function exportInventoryLedgerExcel(ledgerReport: any, productNameFilter?: string, dateFrom?: string, dateTo?: string): Promise<boolean> {
+  const wb = XLSX.utils.book_new()
+  const summary = ledgerReport?.summary || {}
+  const items = ledgerReport?.items || []
+
+  const headers = [
+    "م", "التاريخ والوقت", "اسم المنتج", "الكود SKU", "الماركة", "الفئة",
+    "نوع الحركة", "رقم المرجع/الفاتورة", "بيان / سبب الحركة", "المسؤول",
+    "سعر التكلفة", "الكمية الواردة (+)", "قيمة الوارد (ج.م)",
+    "الكمية المنصرفة (-)", "قيمة المنصرف (ج.م)", "رصيد الكمية", "إجمالي التقييم المخزني (ج.م)"
+  ]
+
+  const dataRows: any[][] = items.map((item: any, idx: number) => {
+    return [
+      idx + 1,
+      formatDateTime(item.created_at),
+      item.product_name,
+      item.sku || '—',
+      item.brand_name || '—',
+      item.category_name || '—',
+      item.movement_type_ar || item.movement_type,
+      item.ref_id || '—',
+      item.reason || '—',
+      item.user_display_name || '—',
+      item.unit_cost,
+      item.qty_in > 0 ? item.qty_in : '—',
+      item.val_in > 0 ? item.val_in : '—',
+      item.qty_out > 0 ? item.qty_out : '—',
+      item.val_out > 0 ? item.val_out : '—',
+      item.qty_balance,
+      item.total_valuation_balance
+    ]
+  })
+
+  // Summary Row
+  dataRows.push([
+    "الإجمالي", "—", "—", "—", "—", "—", "—", "—", "—", "—", "—",
+    summary.period_in_qty || 0,
+    summary.period_in_val || 0,
+    summary.period_out_qty || 0,
+    summary.period_out_val || 0,
+    summary.total_inventory_qty || 0,
+    summary.total_inventory_valuation || 0
+  ])
+
+  const subtitle = `الفترة: من ${dateFrom || 'البداية'} إلى ${dateTo || 'الحالي'} | الصنف: ${productNameFilter || 'جميع الأصناف'}`
+  const ws = buildFormattedSheet(
+    "دفتر أستاذ المخزون (IAS 2 Ledger)",
+    dateFrom || 'البداية',
+    dateTo || 'الحالي',
+    headers,
+    dataRows,
+    [
+      { wch: 6 }, { wch: 20 }, { wch: 28 }, { wch: 15 }, { wch: 15 }, { wch: 15 },
+      { wch: 20 }, { wch: 22 }, { wch: 25 }, { wch: 16 }, { wch: 14 },
+      { wch: 15 }, { wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 14 }, { wch: 22 }
+    ],
+    subtitle
+  )
+
+  XLSX.utils.book_append_sheet(wb, ws, "دفتر أستاذ المخزون")
+  return saveExcelWithDialog(wb, `دفتر_أستاذ_المخزون_${dateFrom || 'كل_الفترات'}.xlsx`)
 }

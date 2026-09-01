@@ -254,6 +254,50 @@ pub async fn get_brands(state: State<'_, AppState>) -> Result<Vec<Brand>, AppErr
     Ok(brands)
 }
 
+#[tauri::command]
+pub async fn create_brand(state: State<'_, AppState>, name: String) -> Result<Brand, AppError> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err(AppError::Validation("اسم الماركة أو الشركة لا يمكن أن يكون فارغاً".to_string()));
+    }
+    let conn = state.pool.get()?;
+    conn.execute("INSERT INTO brands (name, is_active) VALUES (?1, 1)", rusqlite::params![trimmed])?;
+    let id = conn.last_insert_rowid();
+    Ok(Brand {
+        id,
+        name: trimmed.to_string(),
+        is_active: true,
+    })
+}
+
+#[tauri::command]
+pub async fn update_brand(state: State<'_, AppState>, id: i64, name: String) -> Result<(), AppError> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err(AppError::Validation("اسم الماركة لا يمكن أن يكون فارغاً".to_string()));
+    }
+    let conn = state.pool.get()?;
+    conn.execute("UPDATE brands SET name = ?1 WHERE id = ?2", rusqlite::params![trimmed, id])?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn delete_brand(state: State<'_, AppState>, id: i64) -> Result<(), AppError> {
+    let conn = state.pool.get()?;
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM products WHERE brand_id = ?1",
+        rusqlite::params![id],
+        |r| r.get(0),
+    ).unwrap_or(0);
+
+    if count > 0 {
+        conn.execute("UPDATE brands SET is_active = 0 WHERE id = ?1", rusqlite::params![id])?;
+    } else {
+        conn.execute("DELETE FROM brands WHERE id = ?1", rusqlite::params![id])?;
+    }
+    Ok(())
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Category { pub id: i64, pub name_ar: String, pub name_en: String, pub sort_order: i64 }
 
@@ -321,6 +365,195 @@ fn map_movement(r: &rusqlite::Row) -> rusqlite::Result<StockMovement> {
         type_: r.get(3)?, qty_change: r.get(4)?, qty_before: r.get(5)?,
         qty_after: r.get(6)?, ref_id: r.get(7)?, reason: r.get(8)?,
         user_display_name: r.get(9)?, created_at: r.get(10)?,
+    })
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct InventoryLedgerItem {
+    pub id: String,
+    pub created_at: String,
+    pub product_id: String,
+    pub product_name: String,
+    pub sku: Option<String>,
+    pub brand_name: Option<String>,
+    pub category_name: Option<String>,
+    pub movement_type: String,
+    pub movement_type_ar: String,
+    pub ref_id: Option<String>,
+    pub reason: Option<String>,
+    pub user_display_name: Option<String>,
+    pub unit_cost: f64,
+    pub qty_in: i64,
+    pub val_in: f64,
+    pub qty_out: i64,
+    pub val_out: f64,
+    pub qty_balance: i64,
+    pub total_valuation_balance: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct InventoryLedgerSummary {
+    pub total_products_count: i64,
+    pub reorder_needed_count: i64,
+    pub out_of_stock_count: i64,
+    pub total_inventory_qty: i64,
+    pub total_inventory_valuation: f64,
+    pub period_in_qty: i64,
+    pub period_in_val: f64,
+    pub period_out_qty: i64,
+    pub period_out_val: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct InventoryLedgerReport {
+    pub summary: InventoryLedgerSummary,
+    pub items: Vec<InventoryLedgerItem>,
+}
+
+#[tauri::command]
+pub async fn get_inventory_ledger(
+    state: State<'_, AppState>,
+    product_id: Option<String>,
+    date_from: Option<String>,
+    date_to: Option<String>,
+) -> Result<InventoryLedgerReport, AppError> {
+    let conn = state.pool.get()?;
+
+    let total_products_count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM products WHERE is_active=1",
+        [], |r| r.get(0),
+    ).unwrap_or(0);
+
+    let reorder_needed_count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM products WHERE is_active=1 AND stock_qty <= reorder_level AND stock_qty > 0",
+        [], |r| r.get(0),
+    ).unwrap_or(0);
+
+    let out_of_stock_count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM products WHERE is_active=1 AND stock_qty <= 0",
+        [], |r| r.get(0),
+    ).unwrap_or(0);
+
+    let total_inventory_qty: i64 = conn.query_row(
+        "SELECT COALESCE(SUM(stock_qty), 0) FROM products WHERE is_active=1 AND stock_qty > 0",
+        [], |r| r.get(0),
+    ).unwrap_or(0);
+
+    let total_inventory_valuation: f64 = conn.query_row(
+        "SELECT COALESCE(SUM(CAST(stock_qty AS REAL) * cost_price), 0.0) FROM products WHERE is_active=1 AND stock_qty > 0",
+        [], |r| r.get(0),
+    ).unwrap_or(0.0);
+
+    let mut conditions = vec!["1=1".to_string()];
+
+    if let Some(ref pid) = product_id {
+        if !pid.trim().is_empty() {
+            conditions.push(format!("m.product_id = '{}'", pid.replace('\'', "''")));
+        }
+    }
+
+    if let Some(ref df) = date_from {
+        if !df.trim().is_empty() {
+            conditions.push(format!("date(m.created_at, 'localtime') >= '{}'", df.replace('\'', "''")));
+        }
+    }
+
+    if let Some(ref dt) = date_to {
+        if !dt.trim().is_empty() {
+            conditions.push(format!("date(m.created_at, 'localtime') <= '{}'", dt.replace('\'', "''")));
+        }
+    }
+
+    let sql = format!(
+        "SELECT m.id, m.created_at, m.product_id, p.name_ar, p.sku, b.name, c.name_ar,
+                m.type, m.qty_change, m.qty_before, m.qty_after, m.ref_id, m.reason,
+                COALESCE(u.display_name, 'النظام'), p.cost_price
+         FROM stock_movements m
+         JOIN products p ON m.product_id = p.id
+         LEFT JOIN brands b ON p.brand_id = b.id
+         JOIN categories c ON p.category_id = c.id
+         LEFT JOIN users u ON m.user_id = u.id
+         WHERE {} ORDER BY m.created_at DESC LIMIT 1000",
+        conditions.join(" AND ")
+    );
+
+    let mut stmt = conn.prepare(&sql)?;
+    let mut period_in_qty: i64 = 0;
+    let mut period_in_val: f64 = 0.0;
+    let mut period_out_qty: i64 = 0;
+    let mut period_out_val: f64 = 0.0;
+
+    let items = stmt.query_map([], |r| {
+        let id: String = r.get(0)?;
+        let created_at: String = r.get(1)?;
+        let product_id: String = r.get(2)?;
+        let product_name: String = r.get(3)?;
+        let sku: Option<String> = r.get(4)?;
+        let brand_name: Option<String> = r.get(5)?;
+        let category_name: Option<String> = r.get(6)?;
+        let type_: String = r.get(7)?;
+        let qty_change: i64 = r.get(8)?;
+        let _qty_before: i64 = r.get(9)?;
+        let qty_after: i64 = r.get(10)?;
+        let ref_id: Option<String> = r.get(11)?;
+        let reason: Option<String> = r.get(12)?;
+        let user_display_name: Option<String> = r.get(13)?;
+        let unit_cost: f64 = r.get(14)?;
+
+        let (qty_in, qty_out) = if qty_change > 0 {
+            (qty_change, 0)
+        } else {
+            (0, -qty_change)
+        };
+
+        let val_in = qty_in as f64 * unit_cost;
+        let val_out = qty_out as f64 * unit_cost;
+        let total_valuation_balance = (qty_after.max(0) as f64) * unit_cost;
+
+        let movement_type_ar = match type_.as_str() {
+            "purchase" => "شراء توريد مخزني".to_string(),
+            "sale" => "فاتورة مبيعات".to_string(),
+            "return" => "مرتجع مبيعات".to_string(),
+            "repair_use" => "قطع غيار صيانة".to_string(),
+            "adjustment" => "تسوية / هالك مخزني".to_string(),
+            _ => type_.clone(),
+        };
+
+        Ok((
+            InventoryLedgerItem {
+                id, created_at, product_id, product_name, sku, brand_name,
+                category_name, movement_type: type_, movement_type_ar,
+                ref_id, reason, user_display_name, unit_cost,
+                qty_in, val_in, qty_out, val_out, qty_balance: qty_after,
+                total_valuation_balance,
+            },
+            qty_in, val_in, qty_out, val_out
+        ))
+    })?
+    .collect::<Result<Vec<_>, _>>()?;
+
+    let mut ledger_items = Vec::with_capacity(items.len());
+    for (item, q_in, v_in, q_out, v_out) in items {
+        period_in_qty += q_in;
+        period_in_val += v_in;
+        period_out_qty += q_out;
+        period_out_val += v_out;
+        ledger_items.push(item);
+    }
+
+    Ok(InventoryLedgerReport {
+        summary: InventoryLedgerSummary {
+            total_products_count,
+            reorder_needed_count,
+            out_of_stock_count,
+            total_inventory_qty,
+            total_inventory_valuation,
+            period_in_qty,
+            period_in_val,
+            period_out_qty,
+            period_out_val,
+        },
+        items: ledger_items,
     })
 }
 

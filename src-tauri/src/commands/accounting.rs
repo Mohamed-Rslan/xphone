@@ -2583,6 +2583,7 @@ pub struct TransferPayload {
     pub from_account_id: String,
     pub to_account_id: String,
     pub amount: f64,
+    pub fee: Option<f64>,
     pub notes: Option<String>,
     pub user_id: Option<String>,
 }
@@ -2599,27 +2600,102 @@ pub async fn transfer_financial_amount(
         return Err(AppError::Validation("يجب أن يكون مبلغ التحويل أكبر من صفر".into()));
     }
 
-    let conn = state.pool.get()?;
+    let fee = payload.fee.unwrap_or(0.0).max(0.0);
+    let total_required = payload.amount + fee;
+
+    let mut conn = state.pool.get()?;
     let current_balance = calculate_account_balance(&conn, &payload.from_account_id)?;
-    if current_balance < payload.amount {
+    if current_balance < total_required {
         return Err(AppError::Validation(format!(
-            "رصيد الحساب المصدر غير كافٍ. الرصيد الحالي: {:.2} ج.م",
-            current_balance
+            "رصيد الحساب المصدر غير كافٍ. المطلوب شامل العمولة: {:.2} ج.م (المبلغ: {:.2} + العمولة: {:.2}) والرصيد الحالي: {:.2} ج.م",
+            total_required, payload.amount, fee, current_balance
         )));
     }
 
+    let tx = conn.transaction()?;
     let id = Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
+    let today_date = now.chars().take(10).collect::<String>();
 
-    conn.execute(
-        "INSERT INTO financial_transfers (id, from_account_id, to_account_id, amount, notes, created_by, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+    let from_account_name: String = tx.query_row(
+        "SELECT name_ar FROM financial_accounts WHERE id = ?1",
+        rusqlite::params![payload.from_account_id],
+        |r| r.get(0),
+    ).unwrap_or_else(|_| "الحساب المصدر".to_string());
+
+    let to_account_name: String = tx.query_row(
+        "SELECT name_ar FROM financial_accounts WHERE id = ?1",
+        rusqlite::params![payload.to_account_id],
+        |r| r.get(0),
+    ).unwrap_or_else(|_| "الحساب المستلم".to_string());
+
+    let mut fee_expense_id: Option<String> = None;
+
+    if fee > 0.0 {
+        let exp_id = Uuid::new_v4().to_string();
+
+        let cat_id: i64 = tx.query_row(
+            "SELECT id FROM expense_categories WHERE name_ar LIKE '%عمولات%' OR name_ar LIKE '%تحويل%' OR name_ar LIKE '%بنك%' LIMIT 1",
+            [],
+            |r| r.get(0),
+        ).unwrap_or_else(|_| {
+            tx.query_row("SELECT id FROM expense_categories LIMIT 1", [], |r| r.get(0)).unwrap_or(8)
+        });
+
+        let notes_suffix = match &payload.notes {
+            Some(n) if !n.trim().is_empty() => format!(" ({})", n.trim()),
+            _ => "".to_string(),
+        };
+        let fee_desc = format!(
+            "عمولة ومصروفات تحويل مبلغ {:.2} ج.م من ({}) إلى ({}){}",
+            payload.amount, from_account_name, to_account_name, notes_suffix
+        );
+
+        tx.execute(
+            "INSERT INTO expenses (id, category_id, amount, description, is_recurring, recurrence, expense_date, created_by, created_at, financial_account_id)
+             VALUES (?1, ?2, ?3, ?4, 0, NULL, ?5, ?6, ?7, ?8)",
+            rusqlite::params![
+                exp_id, cat_id, fee, fee_desc, today_date, payload.user_id, now, payload.from_account_id
+            ],
+        )?;
+
+        fee_expense_id = Some(exp_id);
+    }
+
+    tx.execute(
+        "INSERT INTO financial_transfers (id, from_account_id, to_account_id, amount, fee, fee_expense_id, notes, created_by, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
         rusqlite::params![
             id, payload.from_account_id, payload.to_account_id, payload.amount,
-            payload.notes, payload.user_id, now
+            fee, fee_expense_id, payload.notes, payload.user_id, now
         ],
     )?;
 
+    if let Some(ref uid) = payload.user_id {
+        let user_display: String = tx.query_row(
+            "SELECT display_name FROM users WHERE id=?1",
+            rusqlite::params![uid],
+            |r| r.get(0),
+        ).unwrap_or_else(|_| "موظف".to_string());
+
+        let fee_str = if fee > 0.0 { format!(" بعمولة تحويل {:.2} ج.م", fee) } else { "".to_string() };
+        let title = format!("تحويل مالي بقيمة {:.2} ج.م", payload.amount);
+        let details = format!(
+            "قام المستخدم ({}) بتحويل مبلغ {:.2} ج.م من حساب ({}) إلى حساب ({}){} {}",
+            user_display, payload.amount, from_account_name, to_account_name, fee_str,
+            payload.notes.as_deref().unwrap_or("")
+        );
+        let _ = crate::commands::notifications::log_system_notification(
+            &tx,
+            Some(uid.as_str()),
+            &user_display,
+            "financial_transfer",
+            &title,
+            Some(&details),
+        );
+    }
+
+    tx.commit()?;
     Ok(())
 }
 
@@ -2670,9 +2746,11 @@ pub async fn get_profit_loss(
         |r| Ok((r.get(0)?, r.get(1)?)),
     ).unwrap_or((0.0, 0.0));
 
-    // 2. Repair revenue & parts cost
+    // 2. Repair revenue & direct service costs (parts + labor + delivery)
     let (repair_revenue, repair_parts_cost): (f64, f64) = conn.query_row(
-        "SELECT COALESCE(SUM(total_cost),0.0), COALESCE(SUM(parts_cost),0.0) FROM repair_jobs
+        "SELECT COALESCE(SUM(CASE WHEN amount_paid > 0.0 THEN amount_paid ELSE total_cost END), 0.0),
+                COALESCE(SUM(total_cost), 0.0)
+         FROM repair_jobs
          WHERE status='delivered' AND date(delivered_at) BETWEEN ?1 AND ?2",
         rusqlite::params![date_from, date_to],
         |r| Ok((r.get(0)?, r.get(1)?)),
@@ -2924,37 +3002,57 @@ pub async fn get_ledger(
     })?.collect::<Result<Vec<_>, _>>()?;
     ledger.extend(rows);
 
-    // 2. Expenses
+    // 2. Expenses (القيد المزدوج: مدين للمصروفات ودائن للنقدية)
     let mut stmt = conn.prepare(
         "SELECT e.expense_date, ec.name_ar, e.amount, e.description,
-                COALESCE(fa.name_ar, 'الخزينة الرئيسية')
+                COALESCE(fa.name_ar, 'الخزينة الرئيسية'), e.financial_account_id
          FROM expenses e
          JOIN expense_categories ec ON e.category_id = ec.id
          LEFT JOIN financial_accounts fa ON e.financial_account_id = fa.id
          WHERE date(e.expense_date) BETWEEN ?1 AND ?2"
     )?;
-    let rows = stmt.query_map(rusqlite::params![date_from, date_to], |r| {
+    let exp_rows = stmt.query_map(rusqlite::params![date_from, date_to], |r| {
         let date: String = r.get(0)?;
         let category: String = r.get(1)?;
         let amount: f64 = r.get(2)?;
         let desc: Option<String> = r.get(3)?;
         let account_name: String = r.get(4)?;
+        let acc_id: Option<String> = r.get(5)?;
         let description = match desc {
             Some(d) => format!("مصروف {}: {}", category, d),
             None => format!("مصروف {}", category),
         };
-        Ok(LedgerRow {
-            date: format!("{}T12:00:00Z", date),
+        Ok((date, category, amount, description, account_name, acc_id))
+    })?;
+
+    for er in exp_rows {
+        let (date, category, amount, description, account_name, acc_id) = er?;
+        let iso_date = if date.contains('T') { date } else { format!("{}T12:00:00Z", date) };
+        
+        // الطرف المدين (حساب المصروفات)
+        ledger.push(LedgerRow {
+            date: iso_date.clone(),
+            ledger_category: "expenses".to_string(),
+            tx_type: format!("مصروف ({})", category),
+            description: description.clone(),
+            debit: amount,
+            credit: 0.0,
+            financial_account_id: acc_id.clone(),
+            financial_account_name: account_name.clone(),
+        });
+
+        // الطرف الدائن (حساب النقدية/البنك المسدد منه)
+        ledger.push(LedgerRow {
+            date: iso_date,
             ledger_category: "assets_cash".to_string(),
-            tx_type: "مصروفات".to_string(),
-            description,
+            tx_type: "سداد مصروف".to_string(),
+            description: format!("سداد {}", description),
             debit: 0.0,
             credit: amount,
-            financial_account_id: None,
+            financial_account_id: acc_id,
             financial_account_name: account_name,
-        })
-    })?.collect::<Result<Vec<_>, _>>()?;
-    ledger.extend(rows);
+        });
+    }
 
     // 3. Repairs
     let mut stmt = conn.prepare(
@@ -3464,7 +3562,10 @@ pub async fn get_cash_movements_report(
     account_id: Option<String>,
 ) -> Result<CashMovementsReport, AppError> {
     let conn = state.pool.get()?;
-    let accounts = get_financial_accounts(state.clone()).await?;
+    let accounts = get_financial_accounts(state.clone()).await.unwrap_or_default();
+
+    let d_from = if date_from.trim().is_empty() { "2000-01-01".to_string() } else { date_from.trim().to_string() };
+    let d_to = if date_to.trim().is_empty() { "2099-12-31".to_string() } else { date_to.trim().to_string() };
 
     struct RawCashEntry {
         date: String,
@@ -3481,13 +3582,13 @@ pub async fn get_cash_movements_report(
 
     // 1. Sales
     let mut stmt = conn.prepare(
-        "SELECT s.created_at, COALESCE(s.financial_account_id, 'cash_drawer'),
-                COALESCE(fa.name_ar, 'الخزينة الرئيسية'), s.invoice_no, s.total
+        "SELECT COALESCE(s.created_at, datetime('now')), COALESCE(s.financial_account_id, 'cash_drawer'),
+                COALESCE(fa.name_ar, 'الخزينة الرئيسية'), COALESCE(s.invoice_no, ''), COALESCE(s.total, 0.0)
          FROM sales s
          LEFT JOIN financial_accounts fa ON s.financial_account_id = fa.id
-         WHERE s.status != 'returned' AND date(s.created_at) BETWEEN ?1 AND ?2"
+         WHERE s.status != 'returned' AND (date(s.created_at) BETWEEN ?1 AND ?2 OR substr(s.created_at, 1, 10) BETWEEN ?1 AND ?2)"
     )?;
-    let rows = stmt.query_map(rusqlite::params![date_from, date_to], |r| {
+    let rows = stmt.query_map(rusqlite::params![d_from, d_to], |r| {
         let date: String = r.get(0)?;
         let acc_id: String = r.get(1)?;
         let acc_name: String = r.get(2)?;
@@ -3504,18 +3605,18 @@ pub async fn get_cash_movements_report(
             commission: 0.0,
         })
     })?;
-    for r in rows { raw_entries.push(r?); }
+    for r in rows { if let Ok(e) = r { raw_entries.push(e); } }
 
     // 2. Expenses
     let mut stmt = conn.prepare(
-        "SELECT e.created_at, COALESCE(e.financial_account_id, 'cash_drawer'),
-                COALESCE(fa.name_ar, 'الخزينة الرئيسية'), ec.name_ar, e.amount, e.description
+        "SELECT COALESCE(e.expense_date, e.created_at, datetime('now')), COALESCE(e.financial_account_id, 'cash_drawer'),
+                COALESCE(fa.name_ar, 'الخزينة الرئيسية'), COALESCE(ec.name_ar, 'مصروفات'), COALESCE(e.amount, 0.0), e.description
          FROM expenses e
          JOIN expense_categories ec ON e.category_id = ec.id
          LEFT JOIN financial_accounts fa ON e.financial_account_id = fa.id
-         WHERE date(e.expense_date) BETWEEN ?1 AND ?2"
+         WHERE date(e.expense_date) BETWEEN ?1 AND ?2 OR date(e.created_at) BETWEEN ?1 AND ?2 OR substr(e.created_at, 1, 10) BETWEEN ?1 AND ?2"
     )?;
-    let rows = stmt.query_map(rusqlite::params![date_from, date_to], |r| {
+    let rows = stmt.query_map(rusqlite::params![d_from, d_to], |r| {
         let date: String = r.get(0)?;
         let acc_id: String = r.get(1)?;
         let acc_name: String = r.get(2)?;
@@ -3534,18 +3635,18 @@ pub async fn get_cash_movements_report(
             commission: 0.0,
         })
     })?;
-    for r in rows { raw_entries.push(r?); }
+    for r in rows { if let Ok(e) = r { raw_entries.push(e); } }
 
     // 3. Repairs
     let mut stmt = conn.prepare(
-        "SELECT r.delivered_at, COALESCE(r.financial_account_id, 'cash_drawer'),
-                COALESCE(fa.name_ar, 'الخزينة الرئيسية'), r.job_no, r.device_model,
-                r.total_cost, r.amount_paid
+        "SELECT COALESCE(r.delivered_at, r.received_at, datetime('now')), COALESCE(r.financial_account_id, 'cash_drawer'),
+                COALESCE(fa.name_ar, 'الخزينة الرئيسية'), COALESCE(r.job_no, ''), COALESCE(r.device_model, ''),
+                COALESCE(r.total_cost, 0.0), COALESCE(r.amount_paid, 0.0)
          FROM repair_jobs r
          LEFT JOIN financial_accounts fa ON r.financial_account_id = fa.id
-         WHERE r.status = 'delivered' AND date(r.delivered_at) BETWEEN ?1 AND ?2"
+         WHERE r.status = 'delivered' AND (date(r.delivered_at) BETWEEN ?1 AND ?2 OR date(r.received_at) BETWEEN ?1 AND ?2 OR substr(r.delivered_at, 1, 10) BETWEEN ?1 AND ?2)"
     )?;
-    let rows = stmt.query_map(rusqlite::params![date_from, date_to], |r| {
+    let rows = stmt.query_map(rusqlite::params![d_from, d_to], |r| {
         let date: String = r.get(0)?;
         let acc_id: String = r.get(1)?;
         let acc_name: String = r.get(2)?;
@@ -3565,18 +3666,19 @@ pub async fn get_cash_movements_report(
             commission: 0.0,
         })
     })?;
-    for r in rows { raw_entries.push(r?); }
+    for r in rows { if let Ok(e) = r { raw_entries.push(e); } }
 
     // 4. Monetary Transactions
     let mut stmt = conn.prepare(
-        "SELECT mt.created_at, mst.name_ar, mt.tx_type, mt.amount, mt.commission,
+        "SELECT COALESCE(mt.created_at, datetime('now')), COALESCE(mst.name_ar, 'خدمة مالية'), COALESCE(mt.tx_type, ''),
+                COALESCE(mt.amount, 0.0), COALESCE(mt.commission, 0.0),
                 COALESCE(mt.financial_account_id, 'wallet_vodafone'), COALESCE(fa.name_ar, 'المحفظة الإلكترونية')
          FROM monetary_transactions mt
          JOIN monetary_service_types mst ON mt.service_type_id = mst.id
          LEFT JOIN financial_accounts fa ON mt.financial_account_id = fa.id
-         WHERE date(mt.created_at) BETWEEN ?1 AND ?2"
+         WHERE date(mt.created_at) BETWEEN ?1 AND ?2 OR substr(mt.created_at, 1, 10) BETWEEN ?1 AND ?2"
     )?;
-    let rows = stmt.query_map(rusqlite::params![date_from, date_to], |r| {
+    let rows = stmt.query_map(rusqlite::params![d_from, d_to], |r| {
         let date: String = r.get(0)?;
         let name: String = r.get(1)?;
         let tx_type: String = r.get(2)?;
@@ -3587,66 +3689,68 @@ pub async fn get_cash_movements_report(
         Ok((date, name, tx_type, amount, comm, dig_id, dig_name))
     })?;
     for r in rows {
-        let (date, name, tx_type, amount, comm, dig_id, dig_name) = r?;
-        if tx_type == "cash_in_transfer_out" {
-            // Cash in drawer
-            raw_entries.push(RawCashEntry {
-                date: date.clone(),
-                account_id: "cash_drawer".to_string(),
-                account_name: "الخزينة الرئيسية".to_string(),
-                tx_type: "خدمات مالية (كاش إن)".to_string(),
-                description: format!("استلام نقدية وعمولة بالخزينة (خدمة {})", name),
-                inflow: amount + comm,
-                outflow: 0.0,
-                commission: comm,
-            });
-            // Digital wallet out
-            raw_entries.push(RawCashEntry {
-                date,
-                account_id: dig_id,
-                account_name: dig_name,
-                tx_type: "خدمات مالية (تحويل رصيد)".to_string(),
-                description: format!("إرسال رصيد للعميل (خدمة {})", name),
-                inflow: 0.0,
-                outflow: amount,
-                commission: 0.0,
-            });
-        } else {
-            // Digital wallet in
-            raw_entries.push(RawCashEntry {
-                date: date.clone(),
-                account_id: dig_id,
-                account_name: dig_name,
-                tx_type: "خدمات مالية (استقبال رصيد)".to_string(),
-                description: format!("استقبال رصيد وعمولة بالمحفظة (خدمة {})", name),
-                inflow: amount + comm,
-                outflow: 0.0,
-                commission: comm,
-            });
-            // Cash drawer out
-            raw_entries.push(RawCashEntry {
-                date,
-                account_id: "cash_drawer".to_string(),
-                account_name: "الخزينة الرئيسية".to_string(),
-                tx_type: "خدمات مالية (كاش أوت)".to_string(),
-                description: format!("دفع نقدية للعميل من الخزينة (خدمة {})", name),
-                inflow: 0.0,
-                outflow: amount,
-                commission: 0.0,
-            });
+        if let Ok((date, name, tx_type, amount, comm, dig_id, dig_name)) = r {
+            if tx_type == "cash_in_transfer_out" {
+                // Cash in drawer
+                raw_entries.push(RawCashEntry {
+                    date: date.clone(),
+                    account_id: "cash_drawer".to_string(),
+                    account_name: "الخزينة الرئيسية".to_string(),
+                    tx_type: "خدمات مالية (كاش إن)".to_string(),
+                    description: format!("استلام نقدية وعمولة بالخزينة (خدمة {})", name),
+                    inflow: amount + comm,
+                    outflow: 0.0,
+                    commission: comm,
+                });
+                // Digital wallet out
+                raw_entries.push(RawCashEntry {
+                    date,
+                    account_id: dig_id,
+                    account_name: dig_name,
+                    tx_type: "خدمات مالية (تحويل رصيد)".to_string(),
+                    description: format!("إرسال رصيد للعميل (خدمة {})", name),
+                    inflow: 0.0,
+                    outflow: amount,
+                    commission: 0.0,
+                });
+            } else {
+                // Digital wallet in
+                raw_entries.push(RawCashEntry {
+                    date: date.clone(),
+                    account_id: dig_id,
+                    account_name: dig_name,
+                    tx_type: "خدمات مالية (استقبال رصيد)".to_string(),
+                    description: format!("استقبال رصيد وعمولة بالمحفظة (خدمة {})", name),
+                    inflow: amount + comm,
+                    outflow: 0.0,
+                    commission: comm,
+                });
+                // Cash drawer out
+                raw_entries.push(RawCashEntry {
+                    date,
+                    account_id: "cash_drawer".to_string(),
+                    account_name: "الخزينة الرئيسية".to_string(),
+                    tx_type: "خدمات مالية (كاش أوت)".to_string(),
+                    description: format!("دفع نقدية للعميل من الخزينة (خدمة {})", name),
+                    inflow: 0.0,
+                    outflow: amount,
+                    commission: 0.0,
+                });
+            }
         }
     }
 
     // 5. Financial Transfers
     let mut stmt = conn.prepare(
-        "SELECT t.created_at, t.amount, t.notes, t.from_account_id, fa_from.name_ar,
-                t.to_account_id, fa_to.name_ar
+        "SELECT COALESCE(t.created_at, datetime('now')), COALESCE(t.amount, 0.0), t.notes,
+                COALESCE(t.from_account_id, 'cash_drawer'), COALESCE(fa_from.name_ar, 'الخزينة الرئيسية'),
+                COALESCE(t.to_account_id, 'cash_drawer'), COALESCE(fa_to.name_ar, 'الخزينة الرئيسية')
          FROM financial_transfers t
-         JOIN financial_accounts fa_from ON t.from_account_id = fa_from.id
-         JOIN financial_accounts fa_to ON t.to_account_id = fa_to.id
-         WHERE date(t.created_at) BETWEEN ?1 AND ?2"
+         LEFT JOIN financial_accounts fa_from ON t.from_account_id = fa_from.id
+         LEFT JOIN financial_accounts fa_to ON t.to_account_id = fa_to.id
+         WHERE date(t.created_at) BETWEEN ?1 AND ?2 OR substr(t.created_at, 1, 10) BETWEEN ?1 AND ?2"
     )?;
-    let rows = stmt.query_map(rusqlite::params![date_from, date_to], |r| {
+    let rows = stmt.query_map(rusqlite::params![d_from, d_to], |r| {
         let date: String = r.get(0)?;
         let amount: f64 = r.get(1)?;
         let notes: Option<String> = r.get(2)?;
@@ -3658,39 +3762,40 @@ pub async fn get_cash_movements_report(
         Ok((date, amount, notes_str, from_id, from_name, to_id, to_name))
     })?;
     for r in rows {
-        let (date, amount, notes_str, from_id, from_name, to_id, to_name) = r?;
-        raw_entries.push(RawCashEntry {
-            date: date.clone(),
-            account_id: from_id,
-            account_name: from_name.clone(),
-            tx_type: "تحويل مالي صادر".to_string(),
-            description: format!("تحويل إلى حساب {}{}", to_name, notes_str),
-            inflow: 0.0,
-            outflow: amount,
-            commission: 0.0,
-        });
-        raw_entries.push(RawCashEntry {
-            date,
-            account_id: to_id,
-            account_name: to_name,
-            tx_type: "تحويل مالي وارد".to_string(),
-            description: format!("تحويل من حساب {}{}", from_name, notes_str),
-            inflow: amount,
-            outflow: 0.0,
-            commission: 0.0,
-        });
+        if let Ok((date, amount, notes_str, from_id, from_name, to_id, to_name)) = r {
+            raw_entries.push(RawCashEntry {
+                date: date.clone(),
+                account_id: from_id,
+                account_name: from_name.clone(),
+                tx_type: "تحويل مالي صادر".to_string(),
+                description: format!("تحويل إلى حساب {}{}", to_name, notes_str),
+                inflow: 0.0,
+                outflow: amount,
+                commission: 0.0,
+            });
+            raw_entries.push(RawCashEntry {
+                date,
+                account_id: to_id,
+                account_name: to_name,
+                tx_type: "تحويل مالي وارد".to_string(),
+                description: format!("تحويل من حساب {}{}", from_name, notes_str),
+                inflow: amount,
+                outflow: 0.0,
+                commission: 0.0,
+            });
+        }
     }
 
     // 6. Supplier Payments
     let mut stmt = conn.prepare(
-        "SELECT sp.paid_at, COALESCE(sp.financial_account_id, 'cash_drawer'),
-                COALESCE(fa.name_ar, 'الخزينة الرئيسية'), s.name, sp.amount, sp.notes
+        "SELECT COALESCE(sp.paid_at, sp.created_at, datetime('now')), COALESCE(sp.financial_account_id, 'cash_drawer'),
+                COALESCE(fa.name_ar, 'الخزينة الرئيسية'), COALESCE(s.name, 'مورد'), COALESCE(sp.amount, 0.0), sp.notes
          FROM supplier_payments sp
          JOIN suppliers s ON sp.supplier_id = s.id
          LEFT JOIN financial_accounts fa ON sp.financial_account_id = fa.id
-         WHERE date(sp.paid_at) BETWEEN ?1 AND ?2"
+         WHERE date(sp.paid_at) BETWEEN ?1 AND ?2 OR date(sp.created_at) BETWEEN ?1 AND ?2 OR substr(sp.created_at, 1, 10) BETWEEN ?1 AND ?2"
     )?;
-    let rows = stmt.query_map(rusqlite::params![date_from, date_to], |r| {
+    let rows = stmt.query_map(rusqlite::params![d_from, d_to], |r| {
         let date: String = r.get(0)?;
         let acc_id: String = r.get(1)?;
         let acc_name: String = r.get(2)?;
@@ -3709,18 +3814,18 @@ pub async fn get_cash_movements_report(
             commission: 0.0,
         })
     })?;
-    for r in rows { raw_entries.push(r?); }
+    for r in rows { if let Ok(e) = r { raw_entries.push(e); } }
 
     // 7. Customer Payments & Advances
     let mut stmt = conn.prepare(
-        "SELECT cp.created_at, COALESCE(cp.financial_account_id, 'cash_drawer'),
-                COALESCE(fa.name_ar, 'الخزينة الرئيسية'), c.name, cp.amount
+        "SELECT COALESCE(cp.created_at, datetime('now')), COALESCE(cp.financial_account_id, 'cash_drawer'),
+                COALESCE(fa.name_ar, 'الخزينة الرئيسية'), COALESCE(c.name, 'عميل'), COALESCE(cp.amount, 0.0)
          FROM customer_payments cp
          JOIN customers c ON cp.customer_id = c.id
          LEFT JOIN financial_accounts fa ON cp.financial_account_id = fa.id
-         WHERE date(cp.created_at) BETWEEN ?1 AND ?2"
+         WHERE date(cp.created_at) BETWEEN ?1 AND ?2 OR substr(cp.created_at, 1, 10) BETWEEN ?1 AND ?2"
     )?;
-    let rows = stmt.query_map(rusqlite::params![date_from, date_to], |r| {
+    let rows = stmt.query_map(rusqlite::params![d_from, d_to], |r| {
         let date: String = r.get(0)?;
         let acc_id: String = r.get(1)?;
         let acc_name: String = r.get(2)?;
@@ -3737,18 +3842,18 @@ pub async fn get_cash_movements_report(
             commission: 0.0,
         })
     })?;
-    for r in rows { raw_entries.push(r?); }
+    for r in rows { if let Ok(e) = r { raw_entries.push(e); } }
 
     // 8. Equity Transactions
     let mut stmt = conn.prepare(
-        "SELECT eq.tx_date, COALESCE(eq.financial_account_id, 'cash_drawer'),
-                COALESCE(fa.name_ar, 'الخزينة الرئيسية'), sh.name, eq.tx_type, eq.amount, eq.notes
+        "SELECT COALESCE(eq.tx_date, eq.created_at, datetime('now')), COALESCE(eq.financial_account_id, 'cash_drawer'),
+                COALESCE(fa.name_ar, 'الخزينة الرئيسية'), COALESCE(sh.name, 'شريك'), COALESCE(eq.tx_type, ''), COALESCE(eq.amount, 0.0), eq.notes
          FROM equity_transactions eq
          JOIN shareholders sh ON eq.shareholder_id = sh.id
          LEFT JOIN financial_accounts fa ON eq.financial_account_id = fa.id
-         WHERE eq.counterpart_type = 'cash' AND date(eq.tx_date) BETWEEN ?1 AND ?2"
+         WHERE eq.counterpart_type = 'cash' AND (date(eq.tx_date) BETWEEN ?1 AND ?2 OR date(eq.created_at) BETWEEN ?1 AND ?2 OR substr(eq.created_at, 1, 10) BETWEEN ?1 AND ?2)"
     )?;
-    let rows = stmt.query_map(rusqlite::params![date_from, date_to], |r| {
+    let rows = stmt.query_map(rusqlite::params![d_from, d_to], |r| {
         let date: String = r.get(0)?;
         let acc_id: String = r.get(1)?;
         let acc_name: String = r.get(2)?;
@@ -3774,7 +3879,7 @@ pub async fn get_cash_movements_report(
             commission: 0.0,
         })
     })?;
-    for r in rows { raw_entries.push(r?); }
+    for r in rows { if let Ok(e) = r { raw_entries.push(e); } }
 
     // Filter by account_id if specified
     if let Some(ref target_acc) = account_id {

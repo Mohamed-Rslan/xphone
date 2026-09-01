@@ -26,8 +26,8 @@ interface TopBarProps {
 
 export default function TopBar({ scale, setScale, onMenuToggle }: TopBarProps) {
   const { user, sessionId, logout, hasPermission } = useAuthStore()
-  const { currentTheme, setTheme, toggleDayNight } = useThemeStore()
-  const { storeLogo, storeName, loadSettings } = useSettingsStore()
+  const { currentTheme, setTheme, toggleDayNight, customPrimary, customAccent, setCustomColors, resetCustomColors } = useThemeStore()
+  const { storeLogo, storeName, storeTagline, loadSettings } = useSettingsStore()
   const [time, setTime] = useState(new Date())
   const [alerts, setAlerts] = useState<any[]>([])
   const [showAlertModal, setShowAlertModal] = useState(false)
@@ -197,7 +197,9 @@ export default function TopBar({ scale, setScale, onMenuToggle }: TopBarProps) {
             <span className="font-black text-sm text-[var(--clr-text)] truncate max-w-[220px] leading-tight">
               {storeName || 'XPhone'}
             </span>
-            <span className="text-[10px] font-bold text-amber-400">إدارة المتجر</span>
+            {storeTagline && (
+              <span className="text-[10px] font-bold text-amber-400 truncate max-w-[200px] mt-0.5">{storeTagline}</span>
+            )}
           </div>
         </div>
 
@@ -240,19 +242,19 @@ export default function TopBar({ scale, setScale, onMenuToggle }: TopBarProps) {
         <button
           type="button"
           onClick={() => {
-            const isCurrentlyLight = currentTheme === 'light_crystal'
+            const wasLight = !activeThemeObj.isDark
             toggleDayNight()
-            toast.success(!isCurrentlyLight ? 'تم تفعيل الوضع النهاري ☀️' : 'تم تفعيل الوضع الليلي 🌙')
+            toast.success(wasLight ? 'تم تفعيل الوضع الليلي 🌙' : 'تم تفعيل الوضع النهاري ☀️')
           }}
           className="btn-icon p-2 rounded-xl cursor-pointer hover:scale-105 transition-transform flex items-center gap-1.5"
-          title={currentTheme === 'light_crystal' ? 'التبديل إلى الوضع الليلي 🌙' : 'التبديل إلى الوضع النهاري ☀️'}
+          title={!activeThemeObj.isDark ? 'التبديل إلى الوضع الليلي 🌙' : 'التبديل إلى الوضع النهاري ☀️'}
           style={{
             background: 'var(--clr-surface-2)',
             borderColor: 'var(--clr-border)',
-            color: currentTheme === 'light_crystal' ? '#f59e0b' : '#38bdf8',
+            color: !activeThemeObj.isDark ? '#f59e0b' : '#38bdf8',
           }}
         >
-          {currentTheme === 'light_crystal' ? (
+          {!activeThemeObj.isDark ? (
             <>
               <Sun size={16} className="text-amber-400" />
               <span className="text-xs font-bold hidden md:inline text-amber-500">نهاري</span>
@@ -662,6 +664,89 @@ export default function TopBar({ scale, setScale, onMenuToggle }: TopBarProps) {
 
             {/* Themes Grid */}
             <div className="flex-1 overflow-y-auto flex flex-col gap-4 pr-1 max-h-[60vh]">
+              {/* Color Customizer Quick Bar */}
+              <div className="p-3.5 rounded-2xl border bg-black/10 flex flex-col gap-3" style={{ borderColor: 'var(--clr-border)' }}>
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <Palette size={16} className="text-[var(--clr-primary)]" />
+                    <span className="text-xs font-bold text-[var(--clr-text)]">تخصيص ألوان الأزرار والإبرازات يدوياً:</span>
+                  </div>
+
+                  {(customPrimary || customAccent) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        resetCustomColors()
+                        toast.success('تمت استعادة ألوان الثيم الأصلية')
+                      }}
+                      className="text-[11px] font-bold text-amber-400 hover:underline cursor-pointer"
+                    >
+                      ↺ استعادة الألوان الأصلية
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="flex items-center justify-between p-2 rounded-xl bg-white/5 border border-white/10">
+                    <span className="text-xs font-bold text-[var(--clr-text)]">اللون الأساسي:</span>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        className="w-7 h-7 rounded-lg cursor-pointer border-0 p-0 bg-transparent"
+                        value={customPrimary || activeThemeObj.primaryColor}
+                        onChange={e => setCustomColors(e.target.value, customAccent || activeThemeObj.accentColor)}
+                      />
+                      <span className="text-[11px] font-mono font-bold text-[var(--clr-primary)]">
+                        {customPrimary || activeThemeObj.primaryColor}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between p-2 rounded-xl bg-white/5 border border-white/10">
+                    <span className="text-xs font-bold text-[var(--clr-text)]">لون التمييز الفرعي:</span>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        className="w-7 h-7 rounded-lg cursor-pointer border-0 p-0 bg-transparent"
+                        value={customAccent || activeThemeObj.accentColor}
+                        onChange={e => setCustomColors(customPrimary || activeThemeObj.primaryColor, e.target.value)}
+                      />
+                      <span className="text-[11px] font-mono font-bold" style={{ color: customAccent || activeThemeObj.accentColor }}>
+                        {customAccent || activeThemeObj.accentColor}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quick Presets */}
+                <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                  <span className="text-[10px] font-bold text-[var(--clr-muted)]">باليتات سريعة:</span>
+                  {[
+                    { name: 'ويندوز', primary: '#0067c0', accent: '#005fb8' },
+                    { name: 'أبل', primary: '#0071e3', accent: '#5e5ce6' },
+                    { name: 'بنفسجي', primary: '#7c6bff', accent: '#00d4aa' },
+                    { name: 'زمردي', primary: '#059669', accent: '#10b981' },
+                    { name: 'فيروزي', primary: '#0284c7', accent: '#06b6d4' },
+                    { name: 'ذهبي', primary: '#d97706', accent: '#f59e0b' },
+                    { name: 'ياقوتي', primary: '#e11d48', accent: '#f43f5e' },
+                    { name: 'فوشيا', primary: '#d946ef', accent: '#ec4899' },
+                  ].map((pal, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => {
+                        setCustomColors(pal.primary, pal.accent)
+                        toast.success(`تم اختيار ألوان: ${pal.name}`)
+                      }}
+                      className="px-2 py-1 rounded-lg border text-[10px] font-bold flex items-center gap-1 cursor-pointer hover:scale-105 transition-all bg-white/5 border-white/10"
+                    >
+                      <div className="w-2.5 h-2.5 rounded-full" style={{ background: pal.primary }} />
+                      <span>{pal.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Day / Light Themes */}
               <div>
                 <h4 className="text-xs font-bold text-sky-400 mb-2.5 flex items-center gap-1.5 border-b pb-1.5" style={{ borderColor: 'var(--clr-border)' }}>

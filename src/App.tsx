@@ -49,16 +49,23 @@ export default function App() {
       }}
     >
       <Toaster
-        position="bottom-left"
+        position="top-center"
+        containerStyle={{
+          zIndex: 999999999,
+        }}
         toastOptions={{
-          duration: 20000,
+          duration: 4000,
           style: {
-            background: 'rgba(13,13,31,0.95)',
-            color: '#f0f0fa',
-            border: '1px solid rgba(255,255,255,0.1)',
+            background: 'rgba(15, 15, 35, 0.98)',
+            color: '#ffffff',
+            border: '1.5px solid rgba(124, 107, 255, 0.5)',
+            boxShadow: '0 20px 45px rgba(0, 0, 0, 0.75), 0 0 25px rgba(124, 107, 255, 0.3)',
             backdropFilter: 'blur(20px)',
             fontFamily: 'Cairo, sans-serif',
+            fontSize: '13px',
+            fontWeight: 'bold',
             direction: 'rtl',
+            zIndex: 999999999,
           },
         }}
       />
